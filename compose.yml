@@ -9,8 +9,9 @@ services:
     # 参考：https://hub.docker.com/_/mysql (Supported tags)
     image: mysql:9.6.0
     restart: unless-stopped
-    expose:
-      - "3306"
+    # 绑定到 127.0.0.1:3306，支持 DataGrip SSH 隧道访问，公网不可直连
+    ports:
+      - "127.0.0.1:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -40,8 +41,9 @@ services:
     # 参考：https://hub.docker.com/_/redis
     image: redis:7.4-alpine
     restart: unless-stopped
-    expose:
-      - "6379"
+    # 绑定到 127.0.0.1:6379，支持 DataGrip SSH 隧道访问，公网不可直连
+    ports:
+      - "127.0.0.1:6379:6379"
     # 加载配置文件，密码通过参数注入（配置文件不支持环境变量展开）
     # 参考：https://hub.docker.com/_/redis#additionally-if-you-want-to-use-your-own-redisconf-
     command: >
