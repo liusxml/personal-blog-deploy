@@ -5,10 +5,12 @@ services:
     image: louislam/dockge:1
     restart: unless-stopped
     ports:
-      # 绑定到 127.0.0.1（本地回环），防止 Docker 穿透 UFW 直接对公网暴露 5001 端口
-      # 访问必须经过 Caddy 反向代理（dockge.chonkybird.com -> 172.17.0.1:5001）
+      # 绑定到 172.17.0.1（Docker 网桥地址）：
+      #   - Caddy 容器通过 172.17.0.1:5001 可以连接（因为 Caddy 在 Docker 内部用网桥访问宿主机）
+      #   - 公网 107.175.36.50:5001 无法直连（172.17.0.1 是内部虚拟地址，不对外路由）
+      #   - 不能用 127.0.0.1：那是主机回环，Docker 容器内部无法访问
       # 参考：https://github.com/louislam/dockge (Security / Reverse Proxy 建议)
-      - "127.0.0.1:5001:5001"
+      - "172.17.0.1:5001:5001"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/app/data
