@@ -1,0 +1,166 @@
+name: personal-blog
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  mysql:
+    # MySQL 9.6.0 — Innovation 频道最新版（2026-03-05 确认）
+    # 参考：https://hub.docker.com/_/mysql (Supported tags)
+    image: mysql:9.6.0
+    restart: unless-stopped
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      # 数据持久化
+      - mysql_data:/var/lib/mysql
+      # 自定义配置（字符集、时区、InnoDB 调优等），通过 !includedir 加载
+      # 参考：https://hub.docker.com/_/mysql#using-a-custom-mysql-configuration-file
+      - ./mysql/custom.cnf:/etc/mysql/conf.d/custom.cnf:ro
+      # 初始化 SQL 脚本，首次启动按字母顺序执行
+      # ⚠️ 数据目录已存在时不再执行
+      # 参考：https://hub.docker.com/_/mysql#initializing-a-fresh-instance
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    # Redis 7.4-alpine — 生产环境极度稳定的 LTS 版本
+    # 参考：https://hub.docker.com/_/redis
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    expose:
+      - "6379"
+    # 加载配置文件，密码通过参数注入（配置文件不支持环境变量展开）
+    # 参考：https://hub.docker.com/_/redis#additionally-if-you-want-to-use-your-own-redisconf-
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --requirepass ${REDIS_PASSWORD}
+    volumes:
+      # 自定义配置（AOF+RDB 持久化、内存限制、禁用危险命令等）
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      # RDB 快照（dump.rdb）和 AOF 文件（appendonly.aof）持久化
+      - redis_data:/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Application ─────────────────────────────────────────────────────────────
+
+  backend:
+    image: liusxml/personal-blog-backend:latest
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      DB_USERNAME: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      OSS_ENDPOINT: ${OSS_ENDPOINT}
+      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY}
+      OSS_SECRET_KEY: ${OSS_SECRET_KEY}
+      OSS_BUCKET: ${OSS_BUCKET}
+    volumes:
+      - ./logs/backend:/app/logs
+    networks:
+      - app-net
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: liusxml/personal-blog-frontend:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks:
+      - app-net
+    depends_on:
+      backend:
+        condition: service_started
+
+  admin:
+    image: liusxml/personal-blog-admin:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      BACKEND_URL: http://backend:8080
+    networks:
+      - app-net
+    depends_on:
+      backend:
+        condition: service_started
+
+  # ── Gateway（唯一对外暴露端口的服务）──────────────────────────────────────────
+
+  caddy:
+    # Caddy 2.11.1 — 当前最新稳定版（2026-03-05 确认）
+    # 参考：https://github.com/caddyserver/caddy/releases
+    # 官方 Docker Compose 配置指南：https://caddyserver.com/docs/running#docker-compose
+    image: caddy:2.11.1-alpine
+    restart: unless-stopped
+    # NET_ADMIN：quic-go 需要此权限提升 UDP 缓冲区以优化 HTTP/3 性能
+    # 参考：https://hub.docker.com/_/caddy#linux-capabilities
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "80:80"           # HTTP（ACME HTTP-01 挑战 + 自动跳转 HTTPS）
+      - "443:443"         # HTTPS
+      - "443:443/udp"     # HTTP/3（QUIC）
+    volumes:
+      # 挂载整个 caddy 目录，支持 Caddyfile import 拆分配置
+      # 参考：https://caddyserver.com/docs/running#setup
+      - ./caddy:/etc/caddy:ro
+      # caddy_data：持久化运行时数据（Cloudflare Origin CA 证书在 certs/ bind mount 中，
+      # 此 volume 存储的是 Caddy 内部运行时状态，并非 TLS 证书本身）
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - app-net
+    depends_on:
+      backend:
+        condition: service_started
+      frontend:
+        condition: service_started
+      admin:
+        condition: service_started
+    # 热重载（官方推荐，不停机更新 Caddyfile）：
+    # docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  app-net:
+    driver: bridge
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  mysql_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

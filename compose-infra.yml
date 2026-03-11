@@ -1,0 +1,98 @@
+name: blog-infra
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  mysql:
+    # MySQL 9.6.0 — Innovation 频道最新版
+    image: mysql:9.6.0
+    restart: unless-stopped
+    # 仅在 Docker 内部网络中暴露端口，不对宿主机开放（安全原则）
+    # 如需本地 DataGrip 连接，请使用 SSH 隧道（推荐）：
+    # SSH Host: 107.175.36.50, Port: 3306, User: root, DB Host: 127.0.0.1
+    expose:
+      - "3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/custom.cnf:/etc/mysql/conf.d/custom.cnf:ro
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    # Redis 7.4-alpine — 生产环境极度稳定的 LTS 版本
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # 仅在 Docker 内部网络中暴露端口，不对宿主机开放
+    # 如需本地 Redis 客户端连接，请使用 SSH 隧道（推荐）
+    expose:
+      - "6379"
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_data:/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Gateway（唯一对外暴露端口的服务）─────────────────────────────────────
+  caddy:
+    # Caddy 2.11.1 — 当前最新稳定版
+    # 参考：https://caddyserver.com/docs/running#docker-compose
+    image: caddy:2.11.1-alpine
+    restart: unless-stopped
+    # NET_ADMIN：quic-go 需要此权限提升 UDP 缓冲区以优化 HTTP/3 性能
+    # 参考：https://hub.docker.com/_/caddy#linux-capabilities
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "80:80"           # HTTP
+      - "443:443"         # HTTPS
+      - "443:443/udp"     # HTTP/3（QUIC）
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      # caddy_data：持久化运行时数据（Cloudflare Origin CA 证书在 certs/ bind mount 中，
+      # 此 volume 存储的是 Caddy 内部运行时状态，并非 TLS 证书本身）
+      - caddy_data:/data
+      # caddy_config：持久化运行时配置缓存，加速 caddy reload 速度
+      - caddy_config:/config
+    networks:
+      - app-net
+    # 热重载（官方推荐，不停机更新 Caddyfile）：
+    # docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  app-net:
+    driver: bridge
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  mysql_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

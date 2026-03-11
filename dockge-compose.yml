@@ -1,0 +1,18 @@
+name: dockge
+
+services:
+  dockge:
+    image: louislam/dockge:1
+    restart: unless-stopped
+    ports:
+      # 绑定到 127.0.0.1（本地回环），防止 Docker 穿透 UFW 直接对公网暴露 5001 端口
+      # 访问必须经过 Caddy 反向代理（dockge.chonkybird.com -> 172.17.0.1:5001）
+      # 参考：https://github.com/louislam/dockge (Security / Reverse Proxy 建议)
+      - "127.0.0.1:5001:5001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      # 挂载博客部署目录，让 Dockge 能管理 personal-blog 堆栈
+      - /opt/personal-blog-deploy:/opt/stacks
+    environment:
+      - DOCKGE_STACKS_DIR=/opt/stacks
