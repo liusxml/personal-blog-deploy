@@ -8,11 +8,12 @@ services:
     # MySQL 9.6.0 — Innovation 频道最新版
     image: mysql:9.6.0
     restart: unless-stopped
-    # 仅在 Docker 内部网络中暴露端口，不对宿主机开放（安全原则）
-    # 如需本地 DataGrip 连接，请使用 SSH 隧道（推荐）：
-    # SSH Host: 107.175.36.50, Port: 3306, User: root, DB Host: 127.0.0.1
-    expose:
-      - "3306"
+    # 绑定到 127.0.0.1:3306（仅宿主机本地可访问）
+    # SSH 隧道连接方式（DataGrip）：
+    #   SSH Host: 107.175.36.50:22  DB Host: 127.0.0.1  DB Port: 3306
+    # 公网无法直连（127.0.0.1 不对外路由）
+    ports:
+      - "127.0.0.1:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -35,10 +36,11 @@ services:
     # Redis 7.4-alpine — 生产环境极度稳定的 LTS 版本
     image: redis:7.4-alpine
     restart: unless-stopped
-    # 仅在 Docker 内部网络中暴露端口，不对宿主机开放
-    # 如需本地 Redis 客户端连接，请使用 SSH 隧道（推荐）
-    expose:
-      - "6379"
+    # 绑定到 127.0.0.1:6379（仅宿主机本地可访问）
+    # SSH 隧道连接方式：SSH Host: 107.175.36.50:22  DB Host: 127.0.0.1  Port: 6379
+    # 公网无法直连（127.0.0.1 不对外路由）
+    ports:
+      - "127.0.0.1:6379:6379"
     command: >
       redis-server /usr/local/etc/redis/redis.conf
       --requirepass ${REDIS_PASSWORD}
