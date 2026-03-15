@@ -66,6 +66,8 @@ services:
   # ── Application ─────────────────────────────────────────────────────────────
 
   backend:
+    # personal-blog-backend — Spring Boot 3.5.7 + Java 21
+    # 镜像由 GitHub Actions 自动构建并推送到 Docker Hub
     image: liusxml/personal-blog-backend:latest
     restart: unless-stopped
     expose:
@@ -75,10 +77,12 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      OSS_ENDPOINT: ${OSS_ENDPOINT}
-      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY}
-      OSS_SECRET_KEY: ${OSS_SECRET_KEY}
-      OSS_BUCKET: ${OSS_BUCKET}
+      # Bitiful OSS（S3 兼容对象存储）
+      BITIFUL_ENDPOINT: ${BITIFUL_ENDPOINT}
+      BITIFUL_ACCESS_KEY: ${BITIFUL_ACCESS_KEY}
+      BITIFUL_SECRET_KEY: ${BITIFUL_SECRET_KEY}
+      BITIFUL_BUCKET: ${BITIFUL_BUCKET:-blog-module-file}
+      BITIFUL_REGION: ${BITIFUL_REGION:-cn-east-1}
     volumes:
       - ./logs/backend:/app/logs
     networks:
@@ -88,30 +92,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
-  frontend:
-    image: liusxml/personal-blog-frontend:latest
-    restart: unless-stopped
-    expose:
-      - "3000"
-    networks:
-      - app-net
-    depends_on:
-      backend:
-        condition: service_started
-
-  admin:
-    image: liusxml/personal-blog-admin:latest
-    restart: unless-stopped
-    expose:
-      - "3000"
-    environment:
-      BACKEND_URL: http://backend:8080
-    networks:
-      - app-net
-    depends_on:
-      backend:
-        condition: service_started
+    # 利用 Spring Boot Actuator /actuator/health 进行健康检查
+    # start_period=60s：Spring Boot + DB 连接池初始化较慢，给足宻d限期
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q 'UP'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # ── Gateway（唯一对外暴露端口的服务）──────────────────────────────────────────
 

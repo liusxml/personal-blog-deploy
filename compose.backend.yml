@@ -1,0 +1,73 @@
+name: blog-backend
+
+services:
+
+  backend:
+    # personal-blog-backend — Spring Boot 3.5.7 + Java 21
+    # 镜像由 GitHub Actions 自动构建并推送到 Docker Hub
+    # 参考：https://hub.docker.com/r/liusxml/personal-blog-backend
+    image: liusxml/personal-blog-backend:latest
+    restart: unless-stopped
+
+    # 仅在 Docker 内部网络中暴露端口（安全原则）
+    # Caddy 通过服务名 backend:8080 反向代理访问
+    expose:
+      - "8080"
+
+    # ── 环境变量（生产环境通过 .env 注入，不得写死在此文件中）────────────────
+    environment:
+      # 数据库连接（对应 application-prod.yaml 中的 ${DB_USERNAME} / ${DB_PASSWORD}）
+      # 生产环境使用 MYSQL_USER（应用专用账号，非 root）
+      DB_USERNAME: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+
+      # Redis 密码（对应 application.yaml 中的 ${REDIS_PASSWORD:}）
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+      # JWT 签名密钥（最少 256 bit，泄漏后必须立即轮换）
+      JWT_SECRET: ${JWT_SECRET}
+
+      # ── Bitiful OSS（S3 兼容对象存储）──────────────────────────────────────
+      # 参考：application.yaml oss.bitiful 配置段
+      BITIFUL_ENDPOINT: ${BITIFUL_ENDPOINT}
+      BITIFUL_ACCESS_KEY: ${BITIFUL_ACCESS_KEY}
+      BITIFUL_SECRET_KEY: ${BITIFUL_SECRET_KEY}
+      BITIFUL_BUCKET: ${BITIFUL_BUCKET:-blog-module-file}
+      BITIFUL_REGION: ${BITIFUL_REGION:-cn-east-1}
+
+    # ── 日志持久化 ─────────────────────────────────────────────────────────────
+    # Spring Boot 配置：logging.file.name=logs/personal-blog-backend.log
+    # 容器内工作目录为 /app，因此日志路径为 /app/logs/
+    # bind mount 到宿主机 ./logs/backend/，方便直接查看日志
+    volumes:
+      - ./logs/backend:/app/logs
+
+    # ── 网络（独立文件模式：挂载到 blog-infra 创建的 app-net）─────────────────
+    # 注意：单独运行此文件时，需要先运行 compose-infra.yml
+    # Docker Compose 的网络全名规则：<project_name>_<network_name>
+    # blog-infra 项目创建的网络名为：blog-infra_app-net
+    networks:
+      - app-net
+
+    # ── 依赖（仅在 compose-infra.yml 已经运行的前提下有效）─────────────────────
+    # 独立运行此文件时，mysql/redis 服务不在同一 compose project 中，
+    # depends_on 无法跨 project 检测，启动顺序由运维流程保证
+    # （先 compose-infra.yml up -d，再 compose.backend.yml up -d）
+
+    # ── 健康检查 ───────────────────────────────────────────────────────────────
+    # 利用 Spring Boot Actuator 的 /actuator/health 端点（已启用 K8s 探针）
+    # 参考：application.yaml management.endpoint.health 配置段
+    # start_period=60s：Spring Boot + DB 连接池初始化较慢，给足宽限期
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q 'UP'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# ── Networks ────────────────────────────────────────────────────────────────────
+# external: true → 使用 blog-infra 已创建的网络，不自行创建
+networks:
+  app-net:
+    external: true
+    name: blog-infra_app-net
