@@ -101,6 +101,47 @@ services:
       retries: 3
       start_period: 60s
 
+  frontend:
+    # personal-blog-frontend — Next.js 16 + React 19
+    # 博客展示端，纯展示无用户认证
+    image: liusxml/personal-blog-frontend:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks:
+      - app-net
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  admin:
+    # personal-blog-admin — Next.js 15 管理后台
+    # 通过 next.config.ts rewrites 将 /api/* 代理到 backend:8080
+    image: liusxml/personal-blog-admin:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      # 服务端 rewrites 代理（运行时读取，指向 Docker 内部服务名）
+      BACKEND_URL: http://backend:8080
+    networks:
+      - app-net
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # ── Gateway（唯一对外暴露端口的服务）──────────────────────────────────────────
 
   caddy:
@@ -129,7 +170,11 @@ services:
       - app-net
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
     # 热重载（官方推荐，不停机更新 Caddyfile）：
     # docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
     healthcheck:
