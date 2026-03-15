@@ -113,8 +113,9 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    # wget -L: 跟随 Next.js 根路径可能返回的 301 重定向，再判断是否成功
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- -L http://localhost:3000/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -135,8 +136,9 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    # wget -L: 跟随 Next.js 根路径可能返回的 301 重定向
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- -L http://localhost:3000/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
