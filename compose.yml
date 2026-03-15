@@ -130,10 +130,6 @@ services:
     depends_on:
       backend:
         condition: service_started
-      frontend:
-        condition: service_started
-      admin:
-        condition: service_started
     # 热重载（官方推荐，不停机更新 Caddyfile）：
     # docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
     healthcheck:
