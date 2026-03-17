@@ -1,0 +1,65 @@
+name: blog-mysql
+
+services:
+
+  mysql:
+    # MySQL 9.6.0 — Innovation 频道最新版（2026-03-05 确认）
+    # Innovation 频道：每季度发布，包含最新特性，Oracle 官方支持
+    # 参考：https://hub.docker.com/_/mysql (Supported tags)
+    image: mysql:9.6.0
+
+    restart: unless-stopped
+
+    # 绑定到 127.0.0.1:3306（仅宿主机本地可访问）
+    # SSH 隧道连接方式：SSH Host: 107.175.36.50:22  Host: 127.0.0.1  Port: 3306
+    # 公网无法直连（127.0.0.1 不对外路由）
+    ports:
+      - "127.0.0.1:3306:3306"
+
+    # 环境变量来自 .env 文件
+    # 参考：https://hub.docker.com/_/mysql#environment-variables
+    #
+    # MYSQL_ROOT_PASSWORD — 必填，root 超级用户密码
+    # MYSQL_DATABASE      — 创建的初始数据库名
+    # MYSQL_USER          — 应用专用账号（非 root），自动获得 MYSQL_DATABASE 的 GRANT ALL
+    # MYSQL_PASSWORD      — 应用专用账号密码
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+    volumes:
+      # 命名 Volume 持久化数据库文件（官方推荐方式）
+      # 参考：https://hub.docker.com/_/mysql#where-to-store-data
+      - mysql_data:/var/lib/mysql
+
+      # 自定义配置文件：挂载到 conf.d 目录，由主配置 /etc/my.cnf 通过 !includedir 加载
+      # 参考：https://hub.docker.com/_/mysql#using-a-custom-mysql-configuration-file
+      - ./mysql/custom.cnf:/etc/mysql/conf.d/custom.cnf:ro
+
+      # 初始化脚本：容器首次启动时（数据目录为空时）自动按字母顺序执行
+      # 支持 .sh、.sql、.sql.gz、.sql.xz、.sql.zst
+      # ⚠️ 若数据目录已存在数据库，initdb.d 中的脚本不会再次执行
+      # 参考：https://hub.docker.com/_/mysql#initializing-a-fresh-instance
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+
+    networks:
+      - app-net
+
+    # healthcheck：backend 的 depends_on 依赖此检查
+    # mysqladmin ping 不需要完整认证即可探活（官方示例写法）
+    # 参考：https://hub.docker.com/_/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s  # MySQL 初始化较慢，给足宽限期
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  mysql_data:

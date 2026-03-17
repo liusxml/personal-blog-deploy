@@ -1,0 +1,134 @@
+# =============================================================================
+# Caddyfile — 个人博客反向代理配置
+# Caddy 文档：https://caddyserver.com/docs/caddyfile
+# reverse_proxy 指令：https://caddyserver.com/docs/caddyfile/directives/reverse_proxy
+#
+# 重要：在 Docker 网络中，upstream 地址必须使用「服务名」而非 localhost
+# 参考：https://caddyserver.com/docs/running#setup
+# =============================================================================
+
+# 全局配置块（作用于所有站点）
+{
+    # TLS 说明：本站使用 Cloudflare Origin CA 15 年静态证书（见 certs/ 目录）
+    # Caddy 不会触发 ACME / Let's Encrypt 流程，也不需要配置 email
+    # Cloudflare 侧边缘证书（访客 <-> Cloudflare）由 Universal SSL 自动处理
+    # Cloudflare Origin CA 文档：https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/
+
+    # 开启 HTTP/3（QUIC）—— Caddy 2.11+ 默认已启用，此处为显式声明
+    servers {
+        protocols h1 h2 h3
+    }
+}
+
+# 可复用的证书片段：挂载 Cloudflare 15 年长效源服务器证书
+(cloudflare_tls) {
+    tls /etc/caddy/certs/chonkybird.com.pem /etc/caddy/certs/chonkybird.com.key
+}
+
+# ── 博客前台 ──────────────────────────────────────────────────────────
+chonkybird.com, www.chonkybird.com {
+    import cloudflare_tls
+
+    # 将请求反向代理到 frontend 服务（Docker 服务名）的 3000 端口
+    reverse_proxy frontend:3000 {
+        # 转发真实客户端 IP 到上游（Caddy 默认不添加此头）
+        # X-Forwarded-For / X-Forwarded-Proto 由 Caddy 自动添加，无需手动声明
+        # 参考：https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#headers
+        header_up X-Real-IP {remote_host}
+    }
+
+    # 静态文件压缩（gzip + zstd），减少带宽，加快页面加载
+    encode gzip zstd
+
+    # 访问日志（可选，方便排查问题）
+    log {
+        output stderr
+        level  INFO
+    }
+}
+
+# ── 管理后台 ──────────────────────────────────────────────────────────
+admin.chonkybird.com {
+    import cloudflare_tls
+
+    reverse_proxy admin:3000 {
+        header_up X-Real-IP {remote_host}
+    }
+
+    encode gzip zstd
+
+    log {
+        output stderr
+        level  INFO
+    }
+}
+
+# ── API 接口 ──────────────────────────────────────────────────────────
+api.chonkybird.com {
+    import cloudflare_tls
+
+    reverse_proxy backend:8080 {
+        header_up X-Real-IP {remote_host}
+    }
+
+    # API 接口不压缩（JSON 响应通常体积小，压缩收益低，且压缩 CPU 消耗大）
+
+    log {
+        output stderr
+        level  INFO
+    }
+}
+
+# ── 监控中心（Spring Boot Admin）────────────────────────────────────────
+monitor.chonkybird.com {
+    import cloudflare_tls
+
+    reverse_proxy monitor:9000 {
+        header_up X-Real-IP {remote_host}
+    }
+
+    encode gzip zstd
+
+    log {
+        output stderr
+        level  INFO
+    }
+}
+
+# ── Dockge 面板 ───────────────────────────────────────────────────────
+dockge.chonkybird.com {
+    import cloudflare_tls
+
+    # Dockge 是独立部署的，未加入当前 Compose 网络，使用宿主机内部网桥 IP (172.17.0.1)
+    # Dockge 依赖 WebSocket 实时推送日志，需显式透传 Upgrade/Connection 头
+    # 参考：https://github.com/louislam/uptime-kuma/wiki/Reverse-Proxy#caddy
+    reverse_proxy 172.17.0.1:5001 {
+        header_up X-Real-IP {remote_host}
+        # WebSocket 透传（Dockge 通过 WebSocket 实时更新容器状态和日志）
+        header_up Connection {http.request.header.Connection}
+        header_up Upgrade {http.request.header.Upgrade}
+    }
+
+    encode gzip zstd
+
+    log {
+        output stderr
+        level  INFO
+    }
+}
+
+# ── CV 简历 ───────────────────────────────────────────────────────────
+cv.chonkybird.com {
+    import cloudflare_tls
+
+    # 静态文件服务器，挂载路径见 compose.yml: ./cv:/srv/cv:ro
+    root * /srv/cv
+    file_server
+
+    encode gzip zstd
+
+    log {
+        output stderr
+        level  INFO
+    }
+}

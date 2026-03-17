@@ -1,0 +1,21 @@
+name: dockge
+
+services:
+  dockge:
+    image: louislam/dockge:1
+    restart: unless-stopped
+    ports:
+      # 绑定到 172.17.0.1（Docker 网桥地址）：
+      #   - Caddy 容器通过 172.17.0.1:5001 可以连接（因为 Caddy 在 Docker 内部用网桥访问宿主机）
+      #   - 公网 107.175.36.50:5001 无法直连（172.17.0.1 是内部虚拟地址，不对外路由）
+      #   - 不能用 127.0.0.1：那是主机回环，Docker 容器内部无法访问
+      # 参考：https://github.com/louislam/dockge (Security / Reverse Proxy 建议)
+      - "172.17.0.1:5001:5001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      # 挂载博客部署目录，让 Dockge 能管理 personal-blog 堆栈
+      - /opt/personal-blog-deploy:/opt/stacks
+    environment:
+      - DOCKGE_STACKS_DIR=/opt/stacks
+      - DOCKGE_ENABLE_CONSOLE=true  # 启用终端，可在 Dockge UI 直接运行命令

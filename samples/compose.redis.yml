@@ -1,0 +1,52 @@
+name: blog-redis
+
+services:
+
+  redis:
+    # Redis 7.4-alpine — 生产环境极度稳定的 LTS 版本
+    # 参考：https://hub.docker.com/_/redis
+    image: redis:7.4-alpine
+
+    restart: unless-stopped
+
+    # 绑定到 127.0.0.1:6379（仅宿主机本地可访问）
+    # SSH 隧道连接方式：SSH Host: 107.175.36.50:22  Host: 127.0.0.1  Port: 6379
+    # 公网无法直连（127.0.0.1 不对外路由）
+    # 参考：https://hub.docker.com/_/redis#security
+    ports:
+      - "127.0.0.1:6379:6379"
+
+    # 启动命令：加载配置文件，并通过参数注入密码（配置文件不支持环境变量展开）
+    # redis-server 后面的参数会覆盖配置文件中的同名配置
+    # 参考：https://hub.docker.com/_/redis#additionally-if-you-want-to-use-your-own-redisconf-
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --requirepass ${REDIS_PASSWORD}
+
+    volumes:
+      # 挂载自定义配置文件（只读）
+      # 参考：https://hub.docker.com/_/redis#additionally-if-you-want-to-use-your-own-redisconf-
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+      # RDB 快照（dump.rdb）和 AOF 文件（appendonly.aof）均存储在 /data
+      # 参考：https://hub.docker.com/_/redis#start-with-persistent-storage
+      - redis_data:/data
+
+    networks:
+      - app-net
+
+    # healthcheck：backend 的 depends_on 依赖此检查
+    # 必须传入 -a 密码，否则 AUTH 错误导致 healthcheck 失败
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  redis_data:

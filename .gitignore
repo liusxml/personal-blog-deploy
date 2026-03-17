@@ -1,0 +1,29 @@
+# ==============================================================================
+# .gitignore — personal-blog-deploy
+# 此文件防止敏感数据泄漏到 GitHub
+# ==============================================================================
+
+# ── 绝对禁止提交的机密文件 ─────────────────────────────────────────────────────
+
+# 真实配置文件（含所有数据库密码、JWT Secret 等）
+# 从 .env.example 复制并手动填写，绝不上传 Git
+.env
+
+# Cloudflare Origin CA 证书和私钥（15年长效，泄漏后无法撤回！）
+# *.example 示例占位文件可以提交，真实证书文件不能提交
+caddy/certs/*.key
+caddy/certs/*.pem
+!caddy/certs/*.example
+# 重构后新路径（personal-blog/ 子目录）
+personal-blog/caddy/certs/*.key
+personal-blog/caddy/certs/*.pem
+!personal-blog/caddy/certs/*.example
+personal-blog/.env
+
+# 在线简历（含个人信息，VPS 上直接维护，不提交 Git）
+personal-blog/cv/
+
+# ── 系统/工具自动生成的文件 ────────────────────────────────────────────────────
+.DS_Store
+*.swp
+*.swo

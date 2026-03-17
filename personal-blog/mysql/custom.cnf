@@ -1,0 +1,68 @@
+# ==============================================================================
+# MySQL 自定义配置文件
+# 挂载路径：/etc/mysql/conf.d/custom.cnf
+# MySQL 9.x (Oracle-based) 主配置 /etc/my.cnf 通过 !includedir 加载此目录
+# 参考：https://hub.docker.com/_/mysql#using-a-custom-mysql-configuration-file
+# ==============================================================================
+
+[mysqld]
+
+# ── 字符集 ──────────────────────────────────────────────────────────────────
+# utf8mb4 是真正的 4 字节 UTF-8，支持完整 Unicode，包含 emoji 和中文
+# 参考：https://dev.mysql.com/doc/refman/8.4/en/charset-unicode-utf8mb4.html
+character-set-server    = utf8mb4
+collation-server        = utf8mb4_unicode_ci
+character-set-filesystem = utf8mb4
+
+# ── 时区 ────────────────────────────────────────────────────────────────────
+# 明确设置时区，避免与 Spring Boot 应用层时区不一致导致 DATETIME 查询异常
+# +08:00 对应北京时间（CST）
+default-time-zone       = +08:00
+
+# ── InnoDB 存储引擎 ──────────────────────────────────────────────────────────
+# innodb_buffer_pool_size: InnoDB 最重要的参数，用于缓存数据和索引
+# 建议设为可用内存的 50~70%，256M 适合 512M~1G 内存的小型 VPS
+# 参考：https://dev.mysql.com/doc/refman/8.4/en/innodb-buffer-pool.html
+innodb_buffer_pool_size     = 256M
+
+# innodb_log_file_size: Redo log 单文件大小，影响崩溃恢复速度和写入性能
+# 较大的值可改善写密集场景的性能，128M 是合理的起始值
+innodb_redo_log_capacity    = 256M
+
+# innodb_flush_log_at_trx_commit: 事务提交时的刷盘策略
+# 1 = 每次提交都刷盘（ACID 完整，最安全，默认值）✅ 生产环境推荐
+# 2 = 每秒刷盘（性能好，断电可能丢失最多 1 秒数据）
+innodb_flush_log_at_trx_commit = 1
+
+# ── 连接 ────────────────────────────────────────────────────────────────────
+# max_connections: 最大并发连接数，默认 151
+# 个人博客流量较小，200 足够，避免过大导致内存浪费（每连接约 1MB）
+max_connections             = 200
+
+# wait_timeout: 非交互式连接空闲超时（秒），默认 28800（8小时）
+# 降低为 600 秒，回收长期空闲连接，节约资源
+# 注意：需与 HikariCP 的 connectionTimeout 配合（保持小于此值）
+wait_timeout                = 600
+interactive_timeout         = 600
+
+# ── 慢查询日志 ───────────────────────────────────────────────────────────────
+# 开启慢查询日志，记录执行时间超过阈值的 SQL，便于排查性能问题
+# Docker 容器环境推荐输出到 stderr，通过 docker logs 直接查看（无需进容器找文件）
+# 参考：https://hub.docker.com/_/mysql#using-a-custom-mysql-configuration-file
+slow_query_log              = ON
+long_query_time             = 2
+log_output                  = FILE    # TABLE 可改为用 SQL 查 mysql.slow_log 表
+slow_query_log_file         = /dev/stderr
+
+# ── 二进制日志（可选）────────────────────────────────────────────────────────
+# 生产环境建议开启 binlog，用于数据恢复和主从复制
+# 个人博客暂时关闭以节省磁盘空间，如需备份恢复功能可开启
+# skip-log-bin
+
+[mysql]
+# MySQL 客户端默认字符集
+default-character-set = utf8mb4
+
+[client]
+# 客户端连接默认字符集
+default-character-set = utf8mb4
