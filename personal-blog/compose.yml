@@ -86,8 +86,21 @@ services:
       # Spring Boot Admin 客户端注册凭证
       ADMIN_SERVER_USERNAME: admin
       ADMIN_SERVER_PASSWORD: ${ADMIN_SERVER_PASSWORD}
+      # AI / 向量化（通义 DashScope）
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      # Qdrant Cloud 向量数据库鉴权
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      # ── Ops Agent（SSH 远程运维）────────────────────────────────────────────
+      # 私钥在容器内的挂载路径（与 volumes 中的目标路径保持一致）
+      OPS_SSH_KEY_PATH: /app/ssh/id_ed25519
+      # GitHub Webhook HMAC-SHA256 验签密钥（与 GitHub 仓库 Settings > Webhooks > Secret 一致）
+      OPS_WEBHOOK_SECRET: ${OPS_WEBHOOK_SECRET}
     volumes:
       - ./logs/backend:/app/logs
+      # Ops Agent SSH 私钥（只读挂载）
+      # 宿主机路径：运行 docker compose 的用户的 ~/.ssh/id_ed25519
+      # 该私钥对应的公钥必须已添加到 VPS blog-ops 用户的 authorized_keys
+      - ~/.ssh/id_ed25519:/app/ssh/id_ed25519:ro
     networks:
       - app-net
     depends_on:
