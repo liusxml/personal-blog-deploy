@@ -98,9 +98,11 @@ services:
     volumes:
       - ./logs/backend:/app/logs
       # Ops Agent SSH 私钥（只读挂载）
-      # 宿主机路径：运行 docker compose 的用户的 ~/.ssh/id_ed25519
-      # 该私钥对应的公钥必须已添加到 VPS blog-ops 用户的 authorized_keys
-      - ~/.ssh/id_ed25519:/app/ssh/id_ed25519:ro
+      # 在 personal-blog/ 目录下执行：
+      #   ssh-keygen -t ed25519 -f ./ssh/id_ed25519 -N '' -C 'blog-ops-agent'
+      #   cat ./ssh/id_ed25519.pub >> /home/blog-ops/.ssh/authorized_keys
+      # ssh/ 目录已加入 .gitignore，私钥不会被提交
+      - ./ssh/id_ed25519:/app/ssh/id_ed25519:ro
     networks:
       - app-net
     depends_on:

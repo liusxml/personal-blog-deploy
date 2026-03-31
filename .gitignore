@@ -20,6 +20,9 @@ personal-blog/caddy/certs/*.pem
 !personal-blog/caddy/certs/*.example
 personal-blog/.env
 
+# Ops Agent SSH 私钥目录（在 personal-blog/ssh/ 下生成，不提交）
+personal-blog/ssh/
+
 # 在线简历（含个人信息，VPS 上直接维护，不提交 Git）
 personal-blog/cv/
 
