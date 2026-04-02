@@ -83,9 +83,15 @@ services:
       BITIFUL_SECRET_KEY: ${BITIFUL_SECRET_KEY}
       BITIFUL_BUCKET: ${BITIFUL_BUCKET:-blog-module-file}
       BITIFUL_REGION: ${BITIFUL_REGION:-cn-east-1}
-      # Spring Boot Admin 客户端注册凭证
-      ADMIN_SERVER_USERNAME: admin
-      ADMIN_SERVER_PASSWORD: ${ADMIN_SERVER_PASSWORD}
+      # ── OpenTelemetry 无侵入链路追踪 ─────────────────────────────────────
+      # 激活 Dockerfile 中预置的 opentelemetry-javaagent.jar
+      JAVA_TOOL_OPTIONS: -javaagent:/app/opentelemetry-javaagent.jar
+      OTEL_SERVICE_NAME: personal-blog-backend
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=prod
+      # 将 Traces 推送到同机 Alloy 容器（Docker 内网服务名）
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      # 全量采样（个人博客流量小，建议保持）
+      OTEL_TRACES_SAMPLER: parentbased_always_on
       # AI / 向量化（通义 DashScope）
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
       # Qdrant Cloud 向量数据库鉴权
@@ -95,14 +101,25 @@ services:
       OPS_SSH_KEY_PATH: /app/ssh/id_ed25519
       # GitHub Webhook HMAC-SHA256 验签密钥（与 GitHub 仓库 Settings > Webhooks > Secret 一致）
       OPS_WEBHOOK_SECRET: ${OPS_WEBHOOK_SECRET}
+      # ── Spring Boot Admin 客户端注册（monitor profile 启动时自动注册）────────
+      # monitor 服务默认不启动（profiles: monitor），但配置预留，随时可用
+      ADMIN_SERVER_USERNAME: admin
+      ADMIN_SERVER_PASSWORD: ${ADMIN_SERVER_PASSWORD}
+
     volumes:
-      - ./logs/backend:/app/logs
+      # 日志 volume 已移除 — 生产环境遵循 12-Factor App，日志输出到 stdout
+      # Docker Daemon 负责轮转（见下方 logging 配置），Alloy 负责采集并推送到 Grafana Cloud
       # Ops Agent SSH 私钥（只读挂载）
       # 在 personal-blog/ 目录下执行：
       #   ssh-keygen -t ed25519 -f ./ssh/id_ed25519 -N '' -C 'blog-ops-agent'
       #   cat ./ssh/id_ed25519.pub >> /home/blog-ops/.ssh/authorized_keys
       # ssh/ 目录已加入 .gitignore，私钥不会被提交
       - ./ssh/id_ed25519:/app/ssh/id_ed25519:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
     networks:
       - app-net
     depends_on:
@@ -163,8 +180,10 @@ services:
       start_period: 30s
 
   monitor:
-    # Spring Boot Admin Server — 监控中心（展示后端健康状态、指标等）
-    # 镜像由 GitHub Actions 自动构建并推送到 Docker Hub
+    # Spring Boot Admin Server — 已通过 profiles 设为按需启动
+    # 默认不随 docker compose up -d 启动，需要时单独执行：
+    #   docker compose --profile monitor up -d monitor
+    profiles: ["monitor"]
     image: liusxml/personal-blog-admin-server:latest
     restart: unless-stopped
     expose:
@@ -177,13 +196,73 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    # Spring Boot Admin 自身也暴露 Actuator，可用于健康检查
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9000/actuator/health | grep -q 'UP'"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 45s
+
+  # ── Observability ────────────────────────────────────────────────────────────
+
+  dozzle:
+    # Dozzle v10.2.1 — 实时容器日志查看器 + 容器管控
+    # 参考：https://github.com/amir20/dozzle/releases
+    image: amir20/dozzle:v10.2.1
+    restart: unless-stopped
+    # 绑定 127.0.0.1，通过 Caddy 子域名 + 密码保护对外暴露
+    ports:
+      - "127.0.0.1:8888:8080"
+    environment:
+      # 开启容器管理功能（重启、停止等操作）
+      DOZZLE_ENABLE_ACTIONS: "true"
+      # 简单用户名/密码认证（生产环境必须开启）
+      DOZZLE_AUTH_PROVIDER: simple
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # users.yml 需在服务器上提前生成（见 README 步骤）
+      - ./dozzle/users.yml:/data/users.yml:ro
+    networks:
+      - app-net
+
+  alloy:
+    # Grafana Alloy — 官方 OpenTelemetry Collector 发行版
+    # 负责：① Docker 日志 → Loki  ② Prometheus 指标 → Mimir  ③ OTel Traces → Tempo
+    # 参考：https://grafana.com/docs/alloy/latest/set-up/install/docker/
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    ports:
+      # Alloy Web UI：绑定 localhost（通过 SSH 隧道访问，不对公网暴露）
+      - "127.0.0.1:12345:12345"
+    expose:
+      # OTel 接收端口：仅在 Docker 内网暴露，后端 OTel Agent 通过服务名访问
+      - "4317"   # OTLP gRPC
+      - "4318"   # OTLP HTTP
+    environment:
+      GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY}
+      GRAFANA_LOKI_URL: ${GRAFANA_LOKI_URL}
+      GRAFANA_LOKI_USERNAME: ${GRAFANA_LOKI_USERNAME}
+      GRAFANA_PROMETHEUS_URL: ${GRAFANA_PROMETHEUS_URL}
+      GRAFANA_PROMETHEUS_USERNAME: ${GRAFANA_PROMETHEUS_USERNAME}
+      GRAFANA_TEMPO_URL: ${GRAFANA_TEMPO_URL}
+      GRAFANA_TEMPO_USERNAME: ${GRAFANA_TEMPO_USERNAME}
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # Alloy 进度文件（记录已读取的日志偏移量，防止重启后重复推送）
+      - alloy_data:/var/lib/alloy/data
+      # 读取宿主机 Docker 容器原始日志文件
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    networks:
+      - app-net
+    depends_on:
+      backend:
+        condition: service_healthy
 
   # ── Gateway（唯一对外暴露端口的服务）──────────────────────────────────────────
 
@@ -220,8 +299,9 @@ services:
         condition: service_healthy
       admin:
         condition: service_healthy
-      monitor:
-        condition: service_healthy
+      # monitor 已切换为按需启动（profiles: monitor），从依赖中移除
+      dozzle:
+        condition: service_started
     # 热重载（官方推荐，不停机更新 Caddyfile）：
     # docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
     healthcheck:
@@ -242,3 +322,4 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
+  alloy_data:   # Alloy 日志采集进度持久化（防止重启后重复推送）

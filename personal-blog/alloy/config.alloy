@@ -1,0 +1,119 @@
+// ============================================================
+// Grafana Alloy 配置文件 (config.alloy)
+// 数据管道：
+//   ① Docker 容器日志 (stdout) → Grafana Cloud Loki
+//   ② Spring Boot /actuator/prometheus 指标 → Grafana Cloud Mimir
+//   ③ OTel Java Agent Traces → Grafana Cloud Tempo
+// ============================================================
+
+// ────────────────────────────────────────────────────────────
+// 1. 日志采集管道 (Docker Stdout → Loki)
+// ────────────────────────────────────────────────────────────
+
+// 发现宿主机上所有 Docker 容器
+discovery.docker "all_containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// 从 Docker socket 读取容器 stdout 日志流
+loki.source.docker "docker_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.all_containers.targets
+  forward_to = [loki.process.add_labels.receiver]
+}
+
+// 给日志打上清晰的标签（方便在 Grafana 按服务过滤）
+loki.process "add_labels" {
+  forward_to = [loki.write.grafana_cloud.receiver]
+
+  stage.docker {}  // 解析 Docker 原生日志格式
+
+  stage.labels {
+    values = {
+      // 提取 compose 服务名作为 service 标签（例：backend、frontend、mysql）
+      service   = "__meta_docker_container_label_com_docker_compose_service",
+      container = "__meta_docker_container_name",
+    }
+  }
+}
+
+// 推送日志到 Grafana Cloud Loki
+loki.write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_LOKI_URL")
+
+    basic_auth {
+      username = env("GRAFANA_LOKI_USERNAME")
+      password = env("GRAFANA_CLOUD_API_KEY")
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// 2. 指标采集管道 (Spring Boot Actuator → Mimir)
+// ────────────────────────────────────────────────────────────
+
+// 每 15 秒抓取一次 Spring Boot 的 Prometheus 端点
+prometheus.scrape "spring_boot_actuator" {
+  targets = [
+    {
+      __address__      = "backend:8080",
+      __metrics_path__ = "/actuator/prometheus",
+      job              = "personal-blog-backend",
+    },
+  ]
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+// 推送指标到 Grafana Cloud Mimir (Prometheus 兼容)
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = env("GRAFANA_PROMETHEUS_URL")
+
+    basic_auth {
+      username = env("GRAFANA_PROMETHEUS_USERNAME")
+      password = env("GRAFANA_CLOUD_API_KEY")
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// 3. 链路追踪管道 (OTel Java Agent → Tempo)
+// ────────────────────────────────────────────────────────────
+
+// 接收后端 OTel Java Agent 发来的 Traces
+otelcol.receiver.otlp "backend_traces" {
+  grpc {
+    // 仅在 Docker 内网监听（compose.yml 中通过 expose 声明，不映射到宿主机公网）
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+// 批量处理，减少推送次数和网络开销
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlphttp.grafana_cloud.input]
+  }
+}
+
+// 推送 Traces 到 Grafana Cloud Tempo
+otelcol.exporter.otlphttp "grafana_cloud" {
+  client {
+    endpoint = env("GRAFANA_TEMPO_URL")
+
+    auth = otelcol.auth.basic.grafana_credentials.handler
+  }
+}
+
+otelcol.auth.basic "grafana_credentials" {
+  username = env("GRAFANA_TEMPO_USERNAME")
+  password = env("GRAFANA_CLOUD_API_KEY")
+}

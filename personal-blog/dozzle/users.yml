@@ -1,0 +1,5 @@
+users:
+  admin:
+    name: admin
+    email: liusx997@gmail.com
+    password: $2b$12$iSNrwX6x137962ejpQ1B3u1p5UcHjvYJs7/OVRQ3nh30KCk4QN1X2

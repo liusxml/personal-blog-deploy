@@ -1,0 +1,26 @@
+name: dozzle-sample
+
+services:
+  dozzle:
+    # 遵循规范：锁定特定版本，推荐使用当前最新正式版
+    image: amir20/dozzle:v10.2.1
+    restart: unless-stopped
+    ports:
+      # 作为独立测试，绑定到 8888 端口。
+      # 测试完毕后，在真实的 main compose 环境中，如果无需公网访问，建议改为 "127.0.0.1:8888:8080"
+      - "8888:8080"
+    volumes:
+      # Dozzle 的核心：读取 Docker 引擎状态
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # 官方推荐：持久化保存网页偏好设置、置顶容器等数据
+      - dozzle_data_sample:/data
+    environment:
+      # 默认暗黑主题
+      DOZZLE_THEME: dark
+      # 开启高级功能：网页端启动、停止、重启容器
+      DOZZLE_ENABLE_ACTIONS: "true"
+      # 开启高级功能：网页端进入容器终端 (Shell)
+      DOZZLE_ENABLE_SHELL: "true"
+
+volumes:
+  dozzle_data_sample:

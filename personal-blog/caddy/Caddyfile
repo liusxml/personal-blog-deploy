@@ -95,6 +95,27 @@ monitor.chonkybird.com {
     }
 }
 
+# ── Dozzle 容器日志查看器 ──────────────────────────────────────────────
+dozzle.chonkybird.com {
+    import cloudflare_tls
+
+    # Dozzle 使用 Server-Sent Events (SSE) 实时推送日志流，需透传 Connection 头
+    # 参考：https://dozzle.dev/guide/reverse-proxy
+    reverse_proxy dozzle:8080 {
+        header_up X-Real-IP {remote_host}
+        # SSE / WebSocket 透传（Dozzle 实时日志流依赖）
+        header_up Connection {http.request.header.Connection}
+        header_up Upgrade {http.request.header.Upgrade}
+    }
+
+    encode gzip zstd
+
+    log {
+        output stderr
+        level  INFO
+    }
+}
+
 # ── Dockge 面板 ───────────────────────────────────────────────────────
 dockge.chonkybird.com {
     import cloudflare_tls
