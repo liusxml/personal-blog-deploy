@@ -89,7 +89,8 @@ services:
       OTEL_SERVICE_NAME: personal-blog-backend
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=prod
       # 将 Traces 推送到同机 Alloy 容器（Docker 内网服务名）
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      # ⚠️ OTel Java Agent 默认协议是 http/protobuf，对应 4318 端口（4317 是 gRPC）
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
       # 全量采样（个人博客流量小，建议保持）
       OTEL_TRACES_SAMPLER: parentbased_always_on
       # AI / 向量化（通义 DashScope）
