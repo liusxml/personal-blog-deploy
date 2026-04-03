@@ -25,6 +25,15 @@ discovery.relabel "docker_labels" {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service"
   }
+  // 增加 app 和 job 标签（同步为 compose 服务名），适配大多数开源仪表盘（如 Logs / App）
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "app"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "job"
+  }
   // 容器实例名 → container 标签（去掉开头的 / ）
   rule {
     source_labels = ["__meta_docker_container_name"]
