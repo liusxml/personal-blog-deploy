@@ -236,13 +236,17 @@ services:
     # prom/mysqld-exporter v0.16.0 — 将 MySQL 状态转化为 Prometheus metrics
     # 参考：https://github.com/prometheus/mysqld_exporter/releases
     # 前置条件：在 MySQL 中创建低权限 exporter 用户，见 mysql/init/02-exporter-user.sql
+    # v0.16.0 改用 .my.cnf 配置文件传入连接信息（不再支持 DATA_SOURCE_NAME 环境变量）
     image: prom/mysqld-exporter:v0.16.0
     restart: unless-stopped
     expose:
       - "9104"
-    environment:
-      # DATA_SOURCE_NAME 格式：user:password@(host:port)/
-      DATA_SOURCE_NAME: "exporter:${MYSQL_EXPORTER_PASSWORD}@(mysql:3306)/"
+    command:
+      - "--config.my-cnf=/etc/mysql-exporter/.my.cnf"
+      - "--mysqld.address=mysql:3306"
+    volumes:
+      # .my.cnf 由 mysql/exporter.cnf 模板生成，或在服务器上直接创建
+      - ./mysql/exporter.cnf:/etc/mysql-exporter/.my.cnf:ro
     networks:
       - app-net
     depends_on:
@@ -254,6 +258,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
 
   dozzle:
     # Dozzle v10.2.1 — 实时容器日志查看器 + 容器管控

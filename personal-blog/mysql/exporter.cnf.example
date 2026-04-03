@@ -1,0 +1,8 @@
+# MySQL Exporter 连接配置（.my.cnf 格式）
+# ⚠️ 此文件包含明文密码，已加入 .gitignore，不提交到 Git
+# 模板：将 YOUR_EXPORTER_PASSWORD 替换为实际密码
+# 对应 compose.yml 中 mysql-exporter 服务的 volume 挂载
+
+[client]
+user = exporter
+password = YOUR_EXPORTER_PASSWORD
