@@ -211,6 +211,50 @@ services:
 
   # ── Observability ────────────────────────────────────────────────────────────
 
+  redis-exporter:
+    # oliver006/redis_exporter v1.67.0 — 将 Redis INFO 转化为 Prometheus metrics
+    # 参考：https://github.com/oliver006/redis_exporter/releases
+    image: oliver006/redis_exporter:v1.67.0-alpine
+    restart: unless-stopped
+    expose:
+      - "9121"
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks:
+      - app-net
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9121/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  mysql-exporter:
+    # prom/mysqld-exporter v0.16.0 — 将 MySQL 状态转化为 Prometheus metrics
+    # 参考：https://github.com/prometheus/mysqld_exporter/releases
+    # 前置条件：在 MySQL 中创建低权限 exporter 用户，见 mysql/init/02-exporter-user.sql
+    image: prom/mysqld-exporter:v0.16.0
+    restart: unless-stopped
+    expose:
+      - "9104"
+    environment:
+      # DATA_SOURCE_NAME 格式：user:password@(host:port)/
+      DATA_SOURCE_NAME: "exporter:${MYSQL_EXPORTER_PASSWORD}@(mysql:3306)/"
+    networks:
+      - app-net
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9104/metrics | head -1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   dozzle:
     # Dozzle v10.2.1 — 实时容器日志查看器 + 容器管控
     # 参考：https://github.com/amir20/dozzle/releases

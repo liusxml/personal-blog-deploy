@@ -15,8 +15,11 @@
     # Cloudflare Origin CA 文档：https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/
 
     # 开启 HTTP/3（QUIC）—— Caddy 2.11+ 默认已启用，此处为显式声明
+    # 同时启用内置 Prometheus Metrics 端点（:2019/metrics），无需额外 exporter
+    # 参考：https://caddyserver.com/docs/metrics
     servers {
         protocols h1 h2 h3
+        metrics
     }
 }
 
