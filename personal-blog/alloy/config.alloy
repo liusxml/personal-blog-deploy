@@ -100,14 +100,18 @@ otelcol.receiver.otlp "backend_traces" {
 // 批量处理，减少推送次数和网络开销
 otelcol.processor.batch "default" {
   output {
-    traces = [otelcol.exporter.otlphttp.grafana_cloud.input]
+    traces = [otelcol.exporter.otlp.grafana_cloud.input]
   }
 }
 
-// 推送 Traces 到 Grafana Cloud Tempo
-otelcol.exporter.otlphttp "grafana_cloud" {
+// 推送 Traces 到 Grafana Cloud Tempo（使用 gRPC，端口 443）
+otelcol.exporter.otlp "grafana_cloud" {
   client {
     endpoint = env("GRAFANA_TEMPO_URL")
+
+    tls {
+      insecure = false
+    }
 
     auth = otelcol.auth.basic.grafana_credentials.handler
   }

@@ -91,8 +91,10 @@ services:
       # 将 Traces 推送到同机 Alloy 容器（Docker 内网服务名）
       # ⚠️ OTel Java Agent 默认协议是 http/protobuf，对应 4318 端口（4317 是 gRPC）
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
-      # 全量采样（个人博客流量小，建议保持）
       OTEL_TRACES_SAMPLER: parentbased_always_on
+      # 日志已经通过 Docker stdout → Alloy → Loki 采集，禁用 OTLP 日志导出避免 404 噪音
+      OTEL_LOGS_EXPORTER: none
+
       # AI / 向量化（通义 DashScope）
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
       # Qdrant Cloud 向量数据库鉴权
