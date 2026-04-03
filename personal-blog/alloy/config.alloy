@@ -15,26 +15,36 @@ discovery.docker "all_containers" {
   host = "unix:///var/run/docker.sock"
 }
 
-// 从 Docker socket 读取容器 stdout 日志流
-loki.source.docker "docker_logs" {
-  host       = "unix:///var/run/docker.sock"
-  targets    = discovery.docker.all_containers.targets
-  forward_to = [loki.process.add_labels.receiver]
+// 定义标签映射规则（在源头将 Docker 元数据映射为 Loki 可查询标签）
+// 官方推荐模式：https://grafana.com/docs/loki/latest/get-started/quick-start/tutorial
+discovery.relabel "docker_labels" {
+  targets = []
+
+  // compose 服务名 → service 标签（例：backend、frontend、mysql）
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  // 容器实例名 → container 标签（去掉开头的 / ）
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
 }
 
-// 给日志打上清晰的标签（方便在 Grafana 按服务过滤）
-loki.process "add_labels" {
+// 从 Docker socket 读取容器 stdout 日志流，relabel_rules 在源头完成标签映射
+loki.source.docker "docker_logs" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.all_containers.targets
+  forward_to    = [loki.process.docker_logs.receiver]
+  relabel_rules = discovery.relabel.docker_labels.rules
+}
+
+// 解析 Docker 原生日志格式（JSON 包装层）
+loki.process "docker_logs" {
   forward_to = [loki.write.grafana_cloud.receiver]
-
-  stage.docker {}  // 解析 Docker 原生日志格式
-
-  stage.labels {
-    values = {
-      // 提取 compose 服务名作为 service 标签（例：backend、frontend、mysql）
-      service   = "__meta_docker_container_label_com_docker_compose_service",
-      container = "__meta_docker_container_name",
-    }
-  }
+  stage.docker {}
 }
 
 // 推送日志到 Grafana Cloud Loki
@@ -60,6 +70,8 @@ prometheus.scrape "spring_boot_actuator" {
       __address__      = "backend:8080",
       __metrics_path__ = "/actuator/prometheus",
       job              = "personal-blog-backend",
+      // SpringBoot APM Dashboard 使用 application 标签作为过滤变量
+      application      = "personal-blog-backend",
     },
   ]
   scrape_interval = "15s"

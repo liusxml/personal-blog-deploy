@@ -94,6 +94,9 @@ services:
       OTEL_TRACES_SAMPLER: parentbased_always_on
       # 日志已经通过 Docker stdout → Alloy → Loki 采集，禁用 OTLP 日志导出避免 404 噪音
       OTEL_LOGS_EXPORTER: none
+      # 指标已通过 prometheus.scrape 从 Actuator 拉取，禁用 OTLP metrics 导出避免重复 + 404 噪音
+      # 参考：https://opentelemetry.io/docs/languages/java/configuration/#properties-exporters
+      OTEL_METRICS_EXPORTER: none
 
       # AI / 向量化（通义 DashScope）
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
@@ -232,7 +235,8 @@ services:
     # Grafana Alloy — 官方 OpenTelemetry Collector 发行版
     # 负责：① Docker 日志 → Loki  ② Prometheus 指标 → Mimir  ③ OTel Traces → Tempo
     # 参考：https://grafana.com/docs/alloy/latest/set-up/install/docker/
-    image: grafana/alloy:latest
+    # 参考：https://github.com/grafana/alloy/releases — v1.15.0 为 2026-03-26 最新稳定版
+    image: grafana/alloy:v1.15.0
     restart: unless-stopped
     ports:
       # Alloy Web UI：绑定 localhost（通过 SSH 隧道访问，不对公网暴露）
@@ -266,6 +270,14 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    # /-/ready 端点：返回 200 表示 Alloy 已就绪
+    # 参考：https://grafana.com/docs/alloy/latest/reference/http/
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:12345/-/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ── Gateway（唯一对外暴露端口的服务）──────────────────────────────────────────
 
