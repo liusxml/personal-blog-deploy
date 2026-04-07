@@ -1,0 +1,58 @@
+# ==============================================================================
+# Prometheus 配置文件
+#
+# Scrape targets 与 Alloy config.alloy 保持一致，抓取间隔 15s。
+# 数据在本地保留 15 天，供本地 Grafana 可视化。
+# Alloy 仍然独立将指标推送到 Grafana Cloud，两条链路互不干扰。
+# ==============================================================================
+
+global:
+  # 全局默认抓取间隔（单个 job 可覆盖）
+  scrape_interval: 15s
+  # 全局默认抓取超时（必须 <= scrape_interval）
+  scrape_timeout:  10s
+  # 评估告警规则的间隔（如有规则文件）
+  evaluation_interval: 15s
+  # 所有时序附加此外部标签（区分本地 vs Cloud 数据来源）
+  external_labels:
+    environment: prod
+    source:       local-prometheus
+
+# ==============================================================================
+# Scrape Jobs — 与 alloy/config.alloy 中的 prometheus.scrape 块对应
+# ==============================================================================
+
+scrape_configs:
+
+  # ── Spring Boot Actuator ───────────────────────────────────────────────────
+  # 对应 alloy: prometheus.scrape "spring_boot_actuator"
+  # SpringBoot APM 仪表盘通过 application 标签过滤
+  - job_name: personal-blog-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["backend:8080"]
+        labels:
+          application: personal-blog-backend
+
+  # ── Caddy 网关 ─────────────────────────────────────────────────────────────
+  # 对应 alloy: prometheus.scrape "caddy"
+  # Caddy 内置 Admin API，无需额外 exporter
+  # 前提：Caddyfile 全局配置中已开启 servers { metrics }
+  - job_name: caddy
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["caddy:2019"]
+
+  # ── Redis Exporter ─────────────────────────────────────────────────────────
+  # 对应 alloy: prometheus.scrape "redis"
+  # redis-exporter 将 Redis INFO 转为 Prometheus 格式
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  # ── MySQL Exporter ─────────────────────────────────────────────────────────
+  # 对应 alloy: prometheus.scrape "mysql"
+  # mysql-exporter 通过低权限 exporter 账号采集 MySQL 状态
+  - job_name: mysql
+    static_configs:
+      - targets: ["mysql-exporter:9104"]

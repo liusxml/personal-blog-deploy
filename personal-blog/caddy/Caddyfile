@@ -14,6 +14,12 @@
     # Cloudflare 侧边缘证书（访客 <-> Cloudflare）由 Universal SSL 自动处理
     # Cloudflare Origin CA 文档：https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/
 
+    # Admin API 默认仅监听 localhost:2019，Docker 内网的 Alloy 无法访问
+    # 绑定到 0.0.0.0:2019 使同网络容器可拉取 /metrics 端点
+    # ⚠️ 安全：compose.yml 中不暴露 2019 端口到宿主机，仅 Docker 内网可达
+    # 参考：https://caddyserver.com/docs/caddyfile/options#admin
+    admin 0.0.0.0:2019
+
     # 开启 HTTP/3（QUIC）—— Caddy 2.11+ 默认已启用，此处为显式声明
     # 同时启用内置 Prometheus Metrics 端点（:2019/metrics），无需额外 exporter
     # 参考：https://caddyserver.com/docs/metrics
@@ -87,6 +93,23 @@ monitor.chonkybird.com {
     import cloudflare_tls
 
     reverse_proxy monitor:9000 {
+        header_up X-Real-IP {remote_host}
+    }
+
+    encode gzip zstd
+
+    log {
+        output stderr
+        level  INFO
+    }
+}
+
+# ── Grafana 监控可视化 ─────────────────────────────────────────────────
+# iframe 嵌入需要：GF_SECURITY_ALLOW_EMBEDDING=true（已在 compose.yml 配置）
+grafana.chonkybird.com {
+    import cloudflare_tls
+
+    reverse_proxy grafana:3000 {
         header_up X-Real-IP {remote_host}
     }
 

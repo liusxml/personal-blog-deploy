@@ -211,6 +211,95 @@ services:
 
   # ── Observability ────────────────────────────────────────────────────────────
 
+  prometheus:
+    # Prometheus v3.11.0 — 2026-04-02 最新稳定版
+    # 参考：https://github.com/prometheus/prometheus/releases/tag/v3.11.0
+    image: prom/prometheus:v3.11.0
+    restart: unless-stopped
+    # 仅在 Docker 内网暴露，Grafana 通过 prometheus:9090 访问
+    # 调试方式：docker compose exec prometheus wget -qO- http://localhost:9090/-/healthy
+    expose:
+      - "9090"
+    command:
+      # 指定配置文件路径（与 volumes 挂载路径一致）
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      # 本地数据保留 15 天（VPS 磁盘友好）
+      - "--storage.tsdb.retention.time=15d"
+      # TSDB 数据目录（持久化 volume 挂载点）
+      - "--storage.tsdb.path=/prometheus"
+      # 开启热重载（向进程发送 SIGHUP 或 POST /-/reload 可重载配置）
+      - "--web.enable-lifecycle"
+    volumes:
+      # 挂载 scrape 配置文件（只读）
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # TSDB 数据持久化（指标时序存储）
+      - prometheus_data:/prometheus
+    networks:
+      - app-net
+    depends_on:
+      backend:
+        condition: service_healthy
+      mysql-exporter:
+        condition: service_healthy
+      redis-exporter:
+        condition: service_healthy
+    # /-/healthy：返回 200 表示 Prometheus 已就绪并可接受查询
+    # 参考：https://prometheus.io/docs/prometheus/latest/management_api/
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  grafana:
+    # Grafana OSS 12.4.2 — 2026-04 最新稳定版（免费，功能足够）
+    # 参考：https://hub.docker.com/r/grafana/grafana-oss/tags
+    image: grafana/grafana-oss:12.4.2
+    restart: unless-stopped
+    # 仅通过 Caddy 反代对外暴露，不直接映射到宿主机
+    expose:
+      - "3000"
+    environment:
+      # ── 匿名访问（不需要登录）───────────────────────────────────────
+      # 开启匿名访问，赋予 Viewer 角色（只读，无法修改仪表盘）
+      # 参考：https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#auth.anonymous
+      GF_AUTH_ANONYMOUS_ENABLED:    "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE:   "Viewer"
+      # 隐藏登录按钮，访客无法切换到登录页
+      GF_AUTH_DISABLE_LOGIN_FORM:   "true"
+      # ── iframe 嵌入（关键：关闭 X-Frame-Options: deny）──────────────
+      # 参考：https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#security
+      GF_SECURITY_ALLOW_EMBEDDING:  "true"
+      # SameSite=none + Secure：跨域 iframe 场景下 cookie 正确传递
+      GF_SECURITY_COOKIE_SAMESITE:  "none"
+      GF_SECURITY_COOKIE_SECURE:    "true"
+      # ── 服务器配置 ───────────────────────────────────────────────────
+      # 对外访问根 URL（用于告警、分享链接等绝对路径的生成）
+      GF_SERVER_ROOT_URL:           "https://grafana.chonkybird.com"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      # ── 遥测：关闭匿名使用统计上报 ──────────────────────────────────
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      # Grafana 自动扫描此目录下的 YAML 完成 provisioning（数据源、仪表盘）
+      # 参考：https://grafana.com/docs/grafana/latest/administration/provisioning/
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      # 持久化 Grafana 运行时数据（SQLite 数据库、插件、会话等）
+      - grafana_data:/var/lib/grafana
+    networks:
+      - app-net
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    # /api/health：返回 {"database":"ok"} 即服务就绪
+    # 参考：https://grafana.com/docs/grafana/latest/http_api/other/#health
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   redis-exporter:
     # oliver006/redis_exporter v1.67.0 — 将 Redis INFO 转化为 Prometheus metrics
     # 参考：https://github.com/oliver006/redis_exporter/releases
@@ -244,6 +333,7 @@ services:
     command:
       - "--config.my-cnf=/etc/mysql-exporter/.my.cnf"
       - "--mysqld.address=mysql:3306"
+      - "--collect.info_schema.processlist"
     volumes:
       # .my.cnf 由 mysql/exporter.cnf 模板生成，或在服务器上直接创建
       - ./mysql/exporter.cnf:/etc/mysql-exporter/.my.cnf:ro
@@ -366,6 +456,8 @@ services:
       # monitor 已切换为按需启动（profiles: monitor），从依赖中移除
       dozzle:
         condition: service_started
+      grafana:
+        condition: service_healthy
     # 热重载（官方推荐，不停机更新 Caddyfile）：
     # docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
     healthcheck:
@@ -386,4 +478,6 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
-  alloy_data:   # Alloy 日志采集进度持久化（防止重启后重复推送）
+  alloy_data:       # Alloy 日志采集进度持久化（防止重启后重复推送）
+  prometheus_data:  # Prometheus TSDB 时序数据（保留 15 天）
+  grafana_data:     # Grafana 运行时数据（SQLite DB、插件、会话等）

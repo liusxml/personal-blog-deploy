@@ -1,0 +1,24 @@
+# ==============================================================================
+# Grafana Datasource Provisioning — Prometheus
+#
+# Grafana 启动时自动加载此文件，无需手动在 UI 中添加数据源。
+# 参考：https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources
+# ==============================================================================
+
+apiVersion: 1
+
+datasources:
+  - name:   Prometheus
+    type:   prometheus
+    uid:    prometheus           # 固定 UID，仪表盘 JSON 中引用此 UID
+    # proxy 模式：由 Grafana 服务端发起请求到 Prometheus（浏览器不直接访问）
+    access: proxy
+    url:    http://prometheus:9090
+    isDefault: true
+    # false：禁止在 UI 上修改，保持"配置即代码"（Config as Code）
+    editable: false
+    jsonData:
+      # Prometheus 抓取间隔与 prometheus.yml 的 scrape_interval 一致
+      timeInterval: "15s"
+      # 开启 HTTP method POST（Prometheus 2.x 支持，减少 URL 长度限制问题）
+      httpMethod: POST

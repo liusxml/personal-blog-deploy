@@ -1,0 +1,22 @@
+# ==============================================================================
+# Grafana Dashboard Provisioning
+#
+# 声明仪表盘来源目录，Grafana 启动时自动导入目录下所有 .json 文件。
+# 参考：https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+# ==============================================================================
+
+apiVersion: 1
+
+providers:
+  - name:    default
+    type:    file
+    # 禁止在 UI 上修改 provisioned 仪表盘（保持配置即代码）
+    disableDeletion: false
+    # 每 30 秒检查文件变化并热更新（无需重启 Grafana）
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      # 仪表盘 JSON 文件存放路径（与 compose.yml volumes 挂载路径一致）
+      path: /etc/grafana/provisioning/dashboards
+      # 根据子目录自动创建 Grafana 文件夹（false = 全放在 General 文件夹）
+      foldersFromFilesStructure: false
