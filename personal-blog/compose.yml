@@ -411,12 +411,15 @@ services:
         condition: service_healthy
     # /-/ready 端点：返回 200 表示 Alloy 已就绪
     # 参考：https://grafana.com/docs/alloy/latest/reference/http/
+    # 注意：grafana/alloy 镜像（ubuntu:noble）未安装 wget/curl
+    # 改用 bash 内置 /dev/tcp 检查 12345 端口连通性（无需额外工具）
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:12345/-/ready || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/12345' 2>/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 30s
+
 
   # ── Gateway（唯一对外暴露端口的服务）──────────────────────────────────────────
 
