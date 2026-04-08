@@ -172,6 +172,8 @@ services:
     environment:
       # 服务端 rewrites 代理（运行时读取，指向 Docker 内部服务名）
       BACKEND_URL: http://backend:8080
+      # Dozzle 代理地址（Admin Middleware 代理 /dozzle/* 到此地址）
+      DOZZLE_URL: http://dozzle:8080
     networks:
       - app-net
     depends_on:
@@ -355,18 +357,22 @@ services:
     # 参考：https://github.com/amir20/dozzle/releases
     image: amir20/dozzle:v10.2.1
     restart: unless-stopped
-    # 绑定 127.0.0.1，通过 Caddy 子域名 + 密码保护对外暴露
-    ports:
-      - "127.0.0.1:8888:8080"
+    # 仅在 Docker 内网暴露，通过 Admin 的 Next.js Middleware 代理访问
+    # Admin Middleware 负责 JWT 验证并注入 Remote-User Header → Dozzle 直接信任
+    expose:
+      - "8080"
     environment:
-      # 开启容器管理功能（重启、停止等操作）
+      # 容器管理功能（重启、停止等）
       DOZZLE_ENABLE_ACTIONS: "true"
-      # 简单用户名/密码认证（生产环境必须开启）
-      DOZZLE_AUTH_PROVIDER: simple
+      # Forward Proxy 模式：信任代理层注入的 Remote-User/Remote-Name/Remote-Email Header
+      # 由 Admin Middleware 在验证 JWT 后注入，实现与 Admin 的 SSO 无缝集成
+      # 参考：https://dozzle.dev/guide/authentication#forward-proxy
+      DOZZLE_AUTH_PROVIDER: forward-proxy
+      # 资源路径前缀，与 Next.js 代理路径 /dozzle/* 对齐
+      DOZZLE_BASE: /dozzle
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # users.yml 需在服务器上提前生成（见 README 步骤）
-      - ./dozzle/users.yml:/data/users.yml:ro
+      - dozzle_data:/data
     networks:
       - app-net
 
@@ -484,3 +490,4 @@ volumes:
   alloy_data:       # Alloy 日志采集进度持久化（防止重启后重复推送）
   prometheus_data:  # Prometheus TSDB 时序数据（保留 15 天）
   grafana_data:     # Grafana 运行时数据（SQLite DB、插件、会话等）
+  dozzle_data:      # Dozzle 通知设置与用户数据持久化
