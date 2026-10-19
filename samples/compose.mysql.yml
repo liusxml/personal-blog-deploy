@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
 
     # 绑定到 127.0.0.1:3306（仅宿主机本地可访问）
-    # SSH 隧道连接方式：SSH Host: 107.175.36.50:22  Host: 127.0.0.1  Port: 3306
+    # SSH 隧道连接方式：SSH Host: <VPS_IP>:22  Host: 127.0.0.1  Port: 3306
     # 公网无法直连（127.0.0.1 不对外路由）
     ports:
       - "127.0.0.1:3306:3306"
