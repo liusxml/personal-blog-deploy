@@ -30,3 +30,5 @@ personal-blog/cv/
 .DS_Store
 *.swp
 *.swo
+.idea/
+*.iml
