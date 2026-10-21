@@ -18,8 +18,8 @@ services:
     # 参考：https://hub.docker.com/_/mysql (Supported tags)
     image: mysql:9.6.0
     restart: unless-stopped
-    # 内存硬上限 512MB（配合 custom.cnf 中 innodb_buffer_pool_size=256M，线上实测常驻 ~225MB）
-    mem_limit: 512m
+    # 内存硬上限 768MB（MySQL 9.6 Performance Schema + 256M Buffer Pool 基础常驻 ~464MB，预留 ~300MB 查询缓冲）
+    mem_limit: 768m
     logging: *default-logging
     # 绑定到 127.0.0.1:3306，支持 DataGrip SSH 隧道访问，公网不可直连
     ports:
