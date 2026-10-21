@@ -1,5 +1,14 @@
 name: personal-blog
 
+# ── 全局可复用日志轮转配置（YAML Anchor）────────────────────────────────────
+# 限制每个容器的 JSON 日志单文件最大 20MB、最多保留 3 个归档（上限 60MB/容器）
+# 防止 /var/lib/docker/containers/ 下的日志无限膨胀撑爆 VPS 磁盘
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "20m"
+    max-file: "3"
+
 services:
 
   # ── Infrastructure ──────────────────────────────────────────────────────────
@@ -9,6 +18,9 @@ services:
     # 参考：https://hub.docker.com/_/mysql (Supported tags)
     image: mysql:9.6.0
     restart: unless-stopped
+    # 内存硬上限 512MB（配合 custom.cnf 中 innodb_buffer_pool_size=256M，线上实测常驻 ~225MB）
+    mem_limit: 512m
+    logging: *default-logging
     # 绑定到 127.0.0.1:3306，支持 DataGrip SSH 隧道访问，公网不可直连
     ports:
       - "127.0.0.1:3306:3306"
@@ -41,6 +53,9 @@ services:
     # 参考：https://hub.docker.com/_/redis
     image: redis:7.4-alpine
     restart: unless-stopped
+    # 内存硬上限 192MB（配合 redis.conf 中 maxmemory 128mb，预留 AOF 重写缓冲）
+    mem_limit: 192m
+    logging: *default-logging
     # 绑定到 127.0.0.1:6379，支持 DataGrip SSH 隧道访问，公网不可直连
     ports:
       - "127.0.0.1:6379:6379"
@@ -70,6 +85,9 @@ services:
     # 镜像由 GitHub Actions 自动构建并推送到 Docker Hub
     image: liusxml/personal-blog-backend:latest
     restart: unless-stopped
+    # ⚠️ 关键：必须显式设置容器内存上限，JVM 的 -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 才能正确感知！
+    # 设为 1024m 后，JVM 最大堆自动限制为 ~768MB，预留 ~256MB 给 Metaspace、Direct Memory 与 OTel Agent，防止撑爆宿主机触发 OOM
+    mem_limit: 1024m
     expose:
       - "8080"
     environment:
@@ -134,7 +152,7 @@ services:
       redis:
         condition: service_healthy
     # 利用 Spring Boot Actuator /actuator/health 进行健康检查
-    # start_period=60s：Spring Boot + DB 连接池初始化较慢，给足宻d限期
+    # start_period=60s：Spring Boot + DB 连接池初始化较慢，给足宽限期
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q 'UP'"]
       interval: 30s
@@ -147,6 +165,9 @@ services:
     # 博客展示端，纯展示无用户认证
     image: liusxml/personal-blog-frontend:latest
     restart: unless-stopped
+    # 内存硬上限 256MB（Next.js standalone 模式线上实测常驻 ~64MB）
+    mem_limit: 256m
+    logging: *default-logging
     expose:
       - "3000"
     networks:
@@ -163,10 +184,13 @@ services:
       start_period: 30s
 
   admin:
-    # personal-blog-admin — Next.js 15 管理后台
+    # personal-blog-admin — Next.js 16 管理后台
     # 通过 next.config.ts rewrites 将 /api/* 代理到 backend:8080
     image: liusxml/personal-blog-admin:latest
     restart: unless-stopped
+    # 内存硬上限 256MB（线上实测常驻 ~67MB）
+    mem_limit: 256m
+    logging: *default-logging
     expose:
       - "3000"
     environment:
@@ -194,6 +218,9 @@ services:
     profiles: ["monitor"]
     image: liusxml/personal-blog-admin-server:latest
     restart: unless-stopped
+    # 内存硬上限 384MB（激活 JVM MaxRAMPercentage=75%，最大堆 ~288MB）
+    mem_limit: 384m
+    logging: *default-logging
     expose:
       - "9000"
     environment:
@@ -218,6 +245,9 @@ services:
     # 参考：https://github.com/prometheus/prometheus/releases/tag/v3.11.0
     image: prom/prometheus:v3.11.0
     restart: unless-stopped
+    # 内存硬上限 256MB（线上实测常驻 ~53MB）
+    mem_limit: 256m
+    logging: *default-logging
     # 仅在 Docker 内网暴露，Grafana 通过 prometheus:9090 访问
     # 调试方式：docker compose exec prometheus wget -qO- http://localhost:9090/-/healthy
     expose:
@@ -259,6 +289,9 @@ services:
     # 参考：https://hub.docker.com/r/grafana/grafana-oss/tags
     image: grafana/grafana-oss:12.4.2
     restart: unless-stopped
+    # 内存硬上限 256MB（线上实测常驻 ~114MB）
+    mem_limit: 256m
+    logging: *default-logging
     # 仅通过 Caddy 反代对外暴露，不直接映射到宿主机
     expose:
       - "3000"
@@ -307,6 +340,9 @@ services:
     # 参考：https://github.com/oliver006/redis_exporter/releases
     image: oliver006/redis_exporter:v1.67.0-alpine
     restart: unless-stopped
+    # 内存硬上限 64MB（线上实测常驻 ~13MB）
+    mem_limit: 64m
+    logging: *default-logging
     expose:
       - "9121"
     environment:
@@ -330,6 +366,9 @@ services:
     # v0.16.0 改用 .my.cnf 配置文件传入连接信息（不再支持 DATA_SOURCE_NAME 环境变量）
     image: prom/mysqld-exporter:v0.16.0
     restart: unless-stopped
+    # 内存硬上限 64MB（线上实测常驻 ~13MB）
+    mem_limit: 64m
+    logging: *default-logging
     expose:
       - "9104"
     command:
@@ -357,6 +396,9 @@ services:
     # 参考：https://github.com/amir20/dozzle/releases
     image: amir20/dozzle:v10.2.1
     restart: unless-stopped
+    # 内存硬上限 64MB（线上实测常驻 ~17MB）
+    mem_limit: 64m
+    logging: *default-logging
     # 仅在 Docker 内网暴露，通过 Admin 的 Next.js Middleware 代理访问
     # Admin Middleware 负责 JWT 验证并注入 Remote-User Header → Dozzle 直接信任
     expose:
@@ -383,6 +425,9 @@ services:
     # 参考：https://github.com/grafana/alloy/releases — v1.15.0 为 2026-03-26 最新稳定版
     image: grafana/alloy:v1.15.0
     restart: unless-stopped
+    # 内存硬上限 256MB（线上实测常驻 ~164MB）
+    mem_limit: 256m
+    logging: *default-logging
     ports:
       # Alloy Web UI：绑定 localhost（通过 SSH 隧道访问，不对公网暴露）
       - "127.0.0.1:12345:12345"
@@ -435,6 +480,9 @@ services:
     # 官方 Docker Compose 配置指南：https://caddyserver.com/docs/running#docker-compose
     image: caddy:2.11.1-alpine
     restart: unless-stopped
+    # 内存硬上限 128MB（线上实测常驻 ~42MB）
+    mem_limit: 128m
+    logging: *default-logging
     # NET_ADMIN：quic-go 需要此权限提升 UDP 缓冲区以优化 HTTP/3 性能
     # 参考：https://hub.docker.com/_/caddy#linux-capabilities
     cap_add:
@@ -469,8 +517,9 @@ services:
         condition: service_healthy
     # 热重载（官方推荐，不停机更新 Caddyfile）：
     # docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+    # 健康检查：探测 Caddy Admin API (:2019/config/) 确认网关进程存活且已正常监听
     healthcheck:
-      test: ["CMD", "caddy", "version"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2019/config/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

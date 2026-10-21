@@ -4,6 +4,13 @@ services:
   dockge:
     image: louislam/dockge:1
     restart: unless-stopped
+    # 内存硬上限 192MB（线上实测常驻 ~83MB）
+    mem_limit: 192m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
     ports:
       # 绑定到 172.17.0.1（Docker 网桥地址）：
       #   - Caddy 容器通过 172.17.0.1:5001 可以连接（因为 Caddy 在 Docker 内部用网桥访问宿主机）

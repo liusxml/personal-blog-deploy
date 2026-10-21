@@ -29,153 +29,108 @@
     }
 }
 
-# 可复用的证书片段：挂载 Cloudflare 15 年长效源服务器证书
+# ── 可复用配置片段（Snippets）─────────────────────────────────────────
+# 1. Cloudflare 15 年长效源服务器证书（Full Strict 模式）
 (cloudflare_tls) {
     tls /etc/caddy/certs/chonkybird.com.pem /etc/caddy/certs/chonkybird.com.key
 }
 
-# ── 博客前台 ──────────────────────────────────────────────────────────
-chonkybird.com, www.chonkybird.com {
-    import cloudflare_tls
-
-    # 将请求反向代理到 frontend 服务（Docker 服务名）的 3000 端口
-    reverse_proxy frontend:3000 {
-        # 转发真实客户端 IP 到上游（Caddy 默认不添加此头）
-        # X-Forwarded-For / X-Forwarded-Proto 由 Caddy 自动添加，无需手动声明
-        # 参考：https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#headers
-        header_up X-Real-IP {remote_host}
-    }
-
-    # 静态文件压缩（gzip + zstd），减少带宽，加快页面加载
-    encode gzip zstd
-
-    # 访问日志（可选，方便排查问题）
+# 2. 统一访问日志格式（输出到 stderr，由 Alloy 采集推送到 Grafana Loki）
+(common_log) {
     log {
         output stderr
         level  INFO
     }
 }
 
-# ── 管理后台 ──────────────────────────────────────────────────────────
-admin.chonkybird.com {
+# 3. 通用 Web 站点基础配置（TLS 证书 + Gzip/Zstd 压缩 + 访问日志）
+(common_site) {
     import cloudflare_tls
+    encode gzip zstd
+    import common_log
+}
+
+# ── 博客前台 ──────────────────────────────────────────────────────────
+chonkybird.com, www.chonkybird.com {
+    import common_site
+
+    # 将请求反向代理到 frontend 服务（Docker 服务名）的 3000 端口
+    reverse_proxy frontend:3000 {
+        # 转发真实客户端 IP 到上游（Caddy 默认自动添加 X-Forwarded-For / X-Forwarded-Proto）
+        header_up X-Real-IP {remote_host}
+    }
+}
+
+# ── 管理后台（含 /dozzle* 容器日志代理）──────────────────────────────
+admin.chonkybird.com {
+    import common_site
 
     reverse_proxy admin:3000 {
         header_up X-Real-IP {remote_host}
-    }
-
-    encode gzip zstd
-
-    log {
-        output stderr
-        level  INFO
+        # 透传 SSE / WebSocket 升级头（保障内嵌 Dozzle 实时日志流与 AI 终端长连接）
+        header_up Connection {http.request.header.Connection}
+        header_up Upgrade {http.request.header.Upgrade}
     }
 }
 
 # ── API 接口 ──────────────────────────────────────────────────────────
 api.chonkybird.com {
     import cloudflare_tls
+    # API 接口不开启全局压缩（避免影响 AI 问答与 Ops Agent 的 SSE 流式响应缓冲）
+    import common_log
 
     reverse_proxy backend:8080 {
         header_up X-Real-IP {remote_host}
     }
-
-    # API 接口不压缩（JSON 响应通常体积小，压缩收益低，且压缩 CPU 消耗大）
-
-    log {
-        output stderr
-        level  INFO
-    }
 }
 
-# ── 监控中心（Spring Boot Admin）────────────────────────────────────────
+# ── 监控中心（Spring Boot Admin，按需启动）──────────────────────────
 monitor.chonkybird.com {
-    import cloudflare_tls
+    import common_site
 
     reverse_proxy monitor:9000 {
         header_up X-Real-IP {remote_host}
-    }
-
-    encode gzip zstd
-
-    log {
-        output stderr
-        level  INFO
     }
 }
 
 # ── Grafana 监控可视化 ─────────────────────────────────────────────────
 # iframe 嵌入需要：GF_SECURITY_ALLOW_EMBEDDING=true（已在 compose.yml 配置）
 grafana.chonkybird.com {
-    import cloudflare_tls
+    import common_site
 
     reverse_proxy grafana:3000 {
         header_up X-Real-IP {remote_host}
     }
-
-    encode gzip zstd
-
-    log {
-        output stderr
-        level  INFO
-    }
 }
 
-# ── Dozzle 容器日志查看器 ──────────────────────────────────────────────
+# ── Dozzle 容器日志查看器（安全收敛：禁止公网直连绕过鉴权）───────────
 dozzle.chonkybird.com {
-    import cloudflare_tls
+    import common_site
 
-    # Dozzle 使用 Server-Sent Events (SSE) 实时推送日志流，需透传 Connection 头
-    # 参考：https://dozzle.dev/guide/reverse-proxy
-    reverse_proxy dozzle:8080 {
-        header_up X-Real-IP {remote_host}
-        # SSE / WebSocket 透传（Dozzle 实时日志流依赖）
-        header_up Connection {http.request.header.Connection}
-        header_up Upgrade {http.request.header.Upgrade}
-    }
-
-    encode gzip zstd
-
-    log {
-        output stderr
-        level  INFO
-    }
+    # ⚠️ 安全加固：Dozzle 已启用 DOZZLE_AUTH_PROVIDER=forward-proxy 并挂载在 /dozzle 下，
+    # 若直接 reverse_proxy 到 dozzle:8080，外部请求可通过伪造 Remote-User 头绕过后台 JWT 鉴权。
+    # 因此将独立子域名永久重定向至管理后台统一入口，强制经过 Admin Middleware 鉴权。
+    redir https://admin.chonkybird.com/dozzle permanent
 }
 
 # ── Dockge 面板 ───────────────────────────────────────────────────────
 dockge.chonkybird.com {
-    import cloudflare_tls
+    import common_site
 
-    # Dockge 是独立部署的，未加入当前 Compose 网络，使用宿主机内部网桥 IP (172.17.0.1)
-    # Dockge 依赖 WebSocket 实时推送日志，需显式透传 Upgrade/Connection 头
-    # 参考：https://github.com/louislam/uptime-kuma/wiki/Reverse-Proxy#caddy
+    # Dockge 独立部署在宿主机默认网桥（172.17.0.1:5001），依赖 WebSocket 实时推送状态
     reverse_proxy 172.17.0.1:5001 {
         header_up X-Real-IP {remote_host}
-        # WebSocket 透传（Dockge 通过 WebSocket 实时更新容器状态和日志）
         header_up Connection {http.request.header.Connection}
         header_up Upgrade {http.request.header.Upgrade}
-    }
-
-    encode gzip zstd
-
-    log {
-        output stderr
-        level  INFO
     }
 }
 
 # ── CV 简历 ───────────────────────────────────────────────────────────
 cv.chonkybird.com {
-    import cloudflare_tls
+    import common_site
 
     # 静态文件服务器，挂载路径见 compose.yml: ./cv:/srv/cv:ro
     root * /srv/cv
     file_server
-
-    encode gzip zstd
-
-    log {
-        output stderr
-        level  INFO
-    }
 }
+

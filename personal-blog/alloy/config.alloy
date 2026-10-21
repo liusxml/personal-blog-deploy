@@ -69,10 +69,14 @@ loki.write "grafana_cloud" {
 }
 
 // ────────────────────────────────────────────────────────────
-// 2. 指标采集管道 (Spring Boot Actuator → Mimir)
+// 2. 指标采集管道 (Exporters → Grafana Cloud Mimir)
 // ────────────────────────────────────────────────────────────
+// 设计说明：
+//   - 本地 Prometheus (prometheus.yml) 已按 15s 高频采集供本地 Grafana 实时大盘使用；
+//   - Alloy 负责将指标远端备份至 Grafana Cloud Mimir，采用官方推荐的 60s (1 DPM) 间隔，
+//     既符合 Grafana Cloud 免费层速率规范，又将 Exporter 与网络推送开销降低 75%。
 
-// 每 15 秒抓取一次 Spring Boot 的 Prometheus 端点
+// 2A. 抓取 Spring Boot Actuator Prometheus 端点（路径为 /actuator/prometheus）
 prometheus.scrape "spring_boot_actuator" {
   targets = [
     {
@@ -83,11 +87,34 @@ prometheus.scrape "spring_boot_actuator" {
       application      = "personal-blog-backend",
     },
   ]
-  scrape_interval = "15s"
+  scrape_interval = "60s"
   forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
 }
 
-// 推送指标到 Grafana Cloud Mimir (Prometheus 兼容)
+// 2B. 统一抓取基础设施组件指标（标准 /metrics 路径：Caddy 网关、Redis、MySQL）
+prometheus.scrape "infra_metrics" {
+  targets = [
+    // Caddy 内置 Prometheus 端点（Caddyfile 已开启 servers { metrics }）
+    {
+      __address__ = "caddy:2019",
+      job         = "caddy",
+    },
+    // Redis Exporter（将 Redis INFO 转化为 Prometheus 格式）
+    {
+      __address__ = "redis-exporter:9121",
+      job         = "redis",
+    },
+    // MySQL Exporter（通过低权限 exporter 用户采集 MySQL 状态）
+    {
+      __address__ = "mysql-exporter:9104",
+      job         = "mysql",
+    },
+  ]
+  scrape_interval = "60s"
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+// 推送指标到 Grafana Cloud Mimir (Prometheus Remote Write)
 prometheus.remote_write "grafana_cloud" {
   endpoint {
     url = env("GRAFANA_PROMETHEUS_URL")
@@ -97,54 +124,6 @@ prometheus.remote_write "grafana_cloud" {
       password = env("GRAFANA_CLOUD_API_KEY")
     }
   }
-}
-
-// ────────────────────────────────────────────────────────────
-// 2B. Caddy 网关指标 (内置 Admin API → Mimir)
-// ────────────────────────────────────────────────────────────
-
-// Caddy 内置 Prometheus 端点，无需额外 exporter
-// 需在 Caddyfile 全局配置中启用：servers { metrics }
-// 参考：https://caddyserver.com/docs/metrics
-prometheus.scrape "caddy" {
-  targets = [{
-    __address__      = "caddy:2019",
-    __metrics_path__ = "/metrics",
-    job              = "caddy",
-  }]
-  scrape_interval = "15s"
-  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
-}
-
-// ────────────────────────────────────────────────────────────
-// 2C. Redis 指标 (redis-exporter → Mimir)
-// ────────────────────────────────────────────────────────────
-
-// Redis Exporter 将 Redis INFO 命令输出转化为 Prometheus 格式
-// 参考：https://github.com/oliver006/redis_exporter
-prometheus.scrape "redis" {
-  targets = [{
-    __address__ = "redis-exporter:9121",
-    job         = "redis",
-  }]
-  scrape_interval = "15s"
-  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
-}
-
-// ────────────────────────────────────────────────────────────
-// 2D. MySQL 指标 (mysql-exporter → Mimir)
-// ────────────────────────────────────────────────────────────
-
-// MySQL Exporter 通过低权限 exporter 用户采集 MySQL 状态
-// 前置：在 MySQL 中执行 mysql/init/02-exporter-user.sql 创建用户
-// 参考：https://github.com/prometheus/mysqld_exporter
-prometheus.scrape "mysql" {
-  targets = [{
-    __address__ = "mysql-exporter:9104",
-    job         = "mysql",
-  }]
-  scrape_interval = "15s"
-  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
 }
 
 
