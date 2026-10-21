@@ -38,11 +38,13 @@ jobs:
           docker compose -f personal-blog/compose.yml config -q
           docker compose -f dockge-compose.yml config -q
 
-      # 2. 使用官方 Caddy 2.11 镜像结合占位证书，校验 Caddyfile 语法与 Snippet 引用是否合法
+      # 2. 生成合法的临时自签名 PEM 证书，使用官方 Caddy 2.11 镜像校验 Caddyfile 语法与 Snippet 引用
       - name: Validate Caddyfile syntax
         run: |
-          cp personal-blog/caddy/certs/chonkybird.com.pem.example personal-blog/caddy/certs/chonkybird.com.pem
-          cp personal-blog/caddy/certs/chonkybird.com.key.example personal-blog/caddy/certs/chonkybird.com.key
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout personal-blog/caddy/certs/chonkybird.com.key \
+            -out personal-blog/caddy/certs/chonkybird.com.pem \
+            -days 1 -subj "/CN=chonkybird.com"
           docker run --rm \
             -v "${{ github.workspace }}/personal-blog/caddy:/etc/caddy:ro" \
             caddy:2.11.1-alpine \
