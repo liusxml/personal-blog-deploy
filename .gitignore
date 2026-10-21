@@ -23,8 +23,17 @@ personal-blog/.env
 # Ops Agent SSH 私钥目录（在 personal-blog/ssh/ 下生成，不提交）
 personal-blog/ssh/
 
-# 在线简历（含个人信息，VPS 上直接维护，不提交 Git）
+# MySQL Exporter 数据库凭据配置（含真实密码，在服务器上生成，不提交）
+personal-blog/mysql/exporter.cnf
+
+# 在线简历与静态站点产物（VPS 上直接维护，不提交 Git）
 personal-blog/cv/
+personal-blog/caddy/agy-master-dist/
+
+# 运行时数据与历史日志目录
+data/
+logs/
+personal-blog/logs/
 
 # ── 系统/工具自动生成的文件 ────────────────────────────────────────────────────
 .DS_Store
@@ -32,3 +41,4 @@ personal-blog/cv/
 *.swo
 .idea/
 *.iml
+

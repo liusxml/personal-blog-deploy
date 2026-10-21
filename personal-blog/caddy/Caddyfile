@@ -134,3 +134,14 @@ cv.chonkybird.com {
     file_server
 }
 
+# ── AGY Master 静态站点 ───────────────────────────────────────────────
+agy.chonkybird.com {
+    import common_site
+
+    # 静态文件目录位于 ./caddy/agy-master-dist（随 ./caddy:/etc/caddy:ro 自动挂载）
+    root * /etc/caddy/agy-master-dist
+    try_files {path} /index.html
+    file_server
+}
+
+
