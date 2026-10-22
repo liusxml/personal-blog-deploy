@@ -49,3 +49,38 @@ jobs:
             -v "${{ github.workspace }}/personal-blog/caddy:/etc/caddy:ro" \
             caddy:2.11.1-alpine \
             caddy validate --config /etc/caddy/Caddyfile
+
+  # ============================================================================
+  # GitOps 持续部署任务：仅在 main 分支推送且上方语法校验通过后执行
+  # ============================================================================
+  deploy:
+    name: GitOps Sync to Production VPS
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Sync repository & apply declarative Compose state on VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 8m
+          script: |
+            set -e
+            echo "==> [GitOps] 1. 同步远端部署仓 /opt/personal-blog-deploy 至最新 main 分支..."
+            cd /opt/personal-blog-deploy
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "==> [GitOps] 2. 拉取并按声明式状态差分更新无状态业务容器 (backend / frontend / admin)..."
+            cd /opt/personal-blog-deploy/personal-blog
+            sudo docker compose -f compose.yml pull backend frontend admin
+            sudo docker compose -f compose.yml up -d backend frontend admin
+
+            echo "==> [GitOps] 3. 清理被替换下来的旧镜像缓存..."
+            sudo docker image prune -f
+            echo "==> [GitOps] 同步完成！"
+
