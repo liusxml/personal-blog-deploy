@@ -186,7 +186,7 @@ services:
   admin:
     # personal-blog-admin — Next.js 16 管理后台
     # 通过 next.config.ts rewrites 将 /api/* 代理到 backend:8080
-    image: liusxml/personal-blog-admin:sha-33efd39402aceda61981ba6ac7dc4fe041b3cfad
+    image: liusxml/personal-blog-admin:sha-ef93f35773b52d0c7c86939bd026ce95d91319a3
     restart: unless-stopped
     # 内存硬上限 256MB（线上实测常驻 ~67MB）
     mem_limit: 256m
