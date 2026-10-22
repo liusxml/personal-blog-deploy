@@ -50,6 +50,11 @@
     import common_log
 }
 
+# 4. 内嵌面板防点击劫持白名单（仅允许自身及博客前台/管理后台线上与本地开发端口通过 iframe 嵌入）
+(iframe_embed) {
+    header +Content-Security-Policy "frame-ancestors 'self' https://chonkybird.com https://www.chonkybird.com https://admin.chonkybird.com http://localhost:3001 http://localhost:3002;"
+}
+
 # ── 博客前台 ──────────────────────────────────────────────────────────
 chonkybird.com, www.chonkybird.com {
     import common_site
@@ -61,15 +66,12 @@ chonkybird.com, www.chonkybird.com {
     }
 }
 
-# ── 管理后台（含 /dozzle* 容器日志代理）──────────────────────────────
+# ── 管理后台 ──────────────────────────────────────────────────────────
 admin.chonkybird.com {
     import common_site
 
     reverse_proxy admin:3000 {
         header_up X-Real-IP {remote_host}
-        # 透传 SSE / WebSocket 升级头（保障内嵌 Dozzle 实时日志流与 AI 终端长连接）
-        header_up Connection {http.request.header.Connection}
-        header_up Upgrade {http.request.header.Upgrade}
     }
 }
 
@@ -93,35 +95,37 @@ monitor.chonkybird.com {
     }
 }
 
-# ── Grafana 监控可视化 ─────────────────────────────────────────────────
+# ── Grafana 监控可视化（支持独立访问与前台/后台 iframe 嵌入）─────────
 # iframe 嵌入需要：GF_SECURITY_ALLOW_EMBEDDING=true（已在 compose.yml 配置）
 grafana.chonkybird.com {
     import common_site
+    import iframe_embed
 
     reverse_proxy grafana:3000 {
         header_up X-Real-IP {remote_host}
     }
 }
 
-# ── Dozzle 容器日志查看器（安全收敛：禁止公网直连绕过鉴权）───────────
+# ── Dozzle 容器日志查看器（支持独立访问与管理后台 iframe 嵌入）───────
 dozzle.chonkybird.com {
     import common_site
+    import iframe_embed
 
-    # ⚠️ 安全加固：Dozzle 已启用 DOZZLE_AUTH_PROVIDER=forward-proxy 并挂载在 /dozzle 下，
-    # 若直接 reverse_proxy 到 dozzle:8080，外部请求可通过伪造 Remote-User 头绕过后台 JWT 鉴权。
-    # 因此将独立子域名永久重定向至管理后台统一入口，强制经过 Admin Middleware 鉴权。
-    redir https://admin.chonkybird.com/dozzle permanent
+    reverse_proxy dozzle:8080 {
+        header_up X-Real-IP {remote_host}
+        # 将 Dozzle 登录 Cookie 升级为 SameSite=None; Secure，支持本地开发 (localhost:3001) 跨站 iframe 携带登录态
+        header_down Set-Cookie "SameSite=Lax" "SameSite=None; Secure"
+    }
 }
 
-# ── Dockge 面板 ───────────────────────────────────────────────────────
+# ── Dockge 面板（支持独立访问与管理后台 iframe 嵌入）─────────────────
 dockge.chonkybird.com {
     import common_site
+    import iframe_embed
 
-    # Dockge 独立部署在宿主机默认网桥（172.17.0.1:5001），依赖 WebSocket 实时推送状态
+    # Dockge 独立部署在宿主机默认网桥（172.17.0.1:5001），Caddy 2.11 原生自动透传 WebSocket 升级头
     reverse_proxy 172.17.0.1:5001 {
         header_up X-Real-IP {remote_host}
-        header_up Connection {http.request.header.Connection}
-        header_up Upgrade {http.request.header.Upgrade}
     }
 }
 

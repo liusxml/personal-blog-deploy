@@ -196,8 +196,6 @@ services:
     environment:
       # 服务端 rewrites 代理（运行时读取，指向 Docker 内部服务名）
       BACKEND_URL: http://backend:8080
-      # Dozzle 代理地址（Admin Middleware 代理 /dozzle/* 到此地址）
-      DOZZLE_URL: http://dozzle:8080
     networks:
       - app-net
     depends_on:
@@ -399,22 +397,20 @@ services:
     # 内存硬上限 64MB（线上实测常驻 ~17MB）
     mem_limit: 64m
     logging: *default-logging
-    # 仅在 Docker 内网暴露，通过 Admin 的 Next.js Middleware 代理访问
-    # Admin Middleware 负责 JWT 验证并注入 Remote-User Header → Dozzle 直接信任
+    # 仅在 Docker 内网暴露，通过 Caddy 子域名 (dozzle.chonkybird.com) 反代对外提供服务
     expose:
       - "8080"
     environment:
       # 容器管理功能（重启、停止等）
       DOZZLE_ENABLE_ACTIONS: "true"
-      # Forward Proxy 模式：信任代理层注入的 Remote-User/Remote-Name/Remote-Email Header
-      # 由 Admin Middleware 在验证 JWT 后注入，实现与 Admin 的 SSO 无缝集成
-      # 参考：https://dozzle.dev/guide/authentication#forward-proxy
-      DOZZLE_AUTH_PROVIDER: forward-proxy
-      # 资源路径前缀，与 Next.js 代理路径 /dozzle/* 对齐
-      DOZZLE_BASE: /dozzle
+      # 简单用户名/密码认证（读取 /data/users.yml，支持独立子域名访问与管理后台同站 iframe 嵌入）
+      # 参考：https://dozzle.dev/guide/authentication#simple-authentication
+      DOZZLE_AUTH_PROVIDER: simple
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - dozzle_data:/data
+      # users.yml 需在服务器上提前生成（见 README 步骤，已加入 .gitignore）
+      - ./dozzle/users.yml:/data/users.yml:ro
     networks:
       - app-net
 

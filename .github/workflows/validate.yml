@@ -75,10 +75,11 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "==> [GitOps] 2. 拉取并按声明式状态差分更新无状态业务容器 (backend / frontend / admin)..."
+            echo "==> [GitOps] 2. 拉取并按声明式状态差分更新容器与热重载网关..."
             cd /opt/personal-blog-deploy/personal-blog
             sudo docker compose -f compose.yml pull backend frontend admin
-            sudo docker compose -f compose.yml up -d backend frontend admin
+            sudo docker compose -f compose.yml up -d backend frontend admin dozzle
+            sudo docker compose -f compose.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 
             echo "==> [GitOps] 3. 清理被替换下来的旧镜像缓存..."
             sudo docker image prune -f
