@@ -47,12 +47,11 @@ interactive_timeout         = 600
 
 # ── 慢查询日志 ───────────────────────────────────────────────────────────────
 # 开启慢查询日志，记录执行时间超过阈值的 SQL，便于排查性能问题
-# Docker 容器环境推荐输出到 stderr，通过 docker logs 直接查看（无需进容器找文件）
-# 参考：https://hub.docker.com/_/mysql#using-a-custom-mysql-configuration-file
+# MySQL 9.x 容器以 mysql 用户运行时无权直接打开 /dev/stderr（会触发 MY-011263 ERROR 并自动关闭慢日志），
+# 因此采用 log_output = TABLE 直接写入 mysql.slow_log 系统表，随时可通过 SQL 查询慢日志且零权限冲突
 slow_query_log              = ON
 long_query_time             = 2
-log_output                  = FILE    # TABLE 可改为用 SQL 查 mysql.slow_log 表
-slow_query_log_file         = /dev/stderr
+log_output                  = TABLE
 
 # ── 二进制日志（可选）────────────────────────────────────────────────────────
 # 生产环境建议开启 binlog，用于数据恢复和主从复制

@@ -175,9 +175,10 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    # wget --spider: BusyBox 支持，发送 HEAD 请求，跟随重定向，返回 0 即服务存活
+    # 使用 GET 请求拉取 128B 轻量静态资源 (/vercel.svg) 并丢弃响应体：
+    # 避免 wget --spider 发送 HEAD / 触发首页 force-dynamic SSR 流提前中断（导致 Next.js 16 transformAlgorithm 报错）及每 30s 无意义查库
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:3000/vercel.svg || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -201,9 +202,9 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    # wget --spider: BusyBox 支持，发送 HEAD 请求，跟随重定向，返回 0 即服务存活
+    # 使用 GET 请求拉取轻量静态资源 (/vercel.svg)，绕过路由守卫重定向并避免 HEAD 流中断异常
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:3000/vercel.svg || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
