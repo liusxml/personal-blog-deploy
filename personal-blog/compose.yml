@@ -311,6 +311,8 @@ services:
       # 对外访问根 URL（用于告警、分享链接等绝对路径的生成）
       GF_SERVER_ROOT_URL:           "https://grafana.chonkybird.com"
       GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      # ── 默认首页大盘（打开即展示个人博客全栈监控总览，告别空白欢迎页）──
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: "/etc/grafana/provisioning/dashboards/blog-overview.json"
       # ── 遥测：关闭匿名使用统计上报 ──────────────────────────────────
       GF_ANALYTICS_REPORTING_ENABLED: "false"
     volumes:
