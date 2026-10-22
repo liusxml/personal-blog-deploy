@@ -83,7 +83,7 @@ services:
   backend:
     # personal-blog-backend — Spring Boot 3.5.7 + Java 21
     # 镜像由 GitHub Actions 自动构建并推送到 Docker Hub
-    image: liusxml/personal-blog-backend:latest
+    image: liusxml/personal-blog-backend:sha-86bde38f56c6a85aee1176cb2e381a8f096acfa6
     restart: unless-stopped
     # ⚠️ 关键：必须显式设置容器内存上限，JVM 的 -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 才能正确感知！
     # 设为 1024m 后，JVM 最大堆自动限制为 ~768MB，预留 ~256MB 给 Metaspace、Direct Memory 与 OTel Agent，防止撑爆宿主机触发 OOM
