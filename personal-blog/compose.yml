@@ -163,7 +163,7 @@ services:
   frontend:
     # personal-blog-frontend — Next.js 16 + React 19
     # 博客展示端，纯展示无用户认证
-    image: liusxml/personal-blog-frontend:sha-f02cc3294e618a77e999633e87f77a609c3b0b66
+    image: liusxml/personal-blog-frontend:sha-c2c6a419783fa602d650fb0a739106d0dbb993d1
     restart: unless-stopped
     # 内存硬上限 256MB（Next.js standalone 模式线上实测常驻 ~64MB）
     mem_limit: 256m
