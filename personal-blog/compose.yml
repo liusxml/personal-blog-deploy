@@ -118,6 +118,8 @@ services:
 
       # AI / 向量化（通义 DashScope）
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      # Google Gemini API Key（供 Ops Copilot Spring AI + MCP 模式使用）
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Qdrant Cloud 向量数据库鉴权
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       # ── Ops Agent（SSH 远程运维）────────────────────────────────────────────
