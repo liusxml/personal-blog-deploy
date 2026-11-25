@@ -30,9 +30,17 @@
 }
 
 # ── 可复用配置片段（Snippets）─────────────────────────────────────────
-# 1. Cloudflare 15 年长效源服务器证书（Full Strict 模式）
+# 1. Cloudflare 15 年长效源服务器证书（Full Strict 模式）+ Authenticated Origin Pulls (mTLS)
+# 仅放行携带本域名专属 Cloudflare 客户端证书的回源连接，拒绝绕过 Cloudflare 的源站 IP 直连
 (cloudflare_tls) {
-    tls /etc/caddy/certs/chonkybird.com.pem /etc/caddy/certs/chonkybird.com.key
+    tls /etc/caddy/certs/chonkybird.com.pem /etc/caddy/certs/chonkybird.com.key {
+        client_auth {
+            mode require_and_verify
+            trust_pool file {
+                pem_file /etc/caddy/certs/aop-ca.pem
+            }
+        }
+    }
 }
 
 # 2. 统一访问日志格式（输出到 stderr，由 Alloy 采集推送到 Grafana Loki）

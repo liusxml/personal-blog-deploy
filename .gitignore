@@ -18,6 +18,8 @@ caddy/certs/*.pem
 personal-blog/caddy/certs/*.key
 personal-blog/caddy/certs/*.pem
 !personal-blog/caddy/certs/*.example
+# Cloudflare Authenticated Origin Pulls 自定义 CA 公钥（纯公钥，不含私钥，供 Caddy mTLS 验签与 CI 校验）
+!personal-blog/caddy/certs/aop-ca.pem
 personal-blog/.env
 
 # Ops Agent SSH 私钥目录（在 personal-blog/ssh/ 下生成，不提交）
