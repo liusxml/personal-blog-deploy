@@ -92,7 +92,7 @@ Dockge     → 容器管理面板（dockge.chonkybird.com，宿主机网桥访�
 
 | 子域名 | 目标服务 | 说明 |
 |:---|:---|:---|
-| `chonkybird.com` / `www` | `frontend:3000` | 博客前台（Next.js） |
+| `blog.chonkybird.com` | `frontend:3000` | 博客前台（Next.js） |
 | `admin.chonkybird.com` | `admin:3000` | 管理后台（Next.js） |
 | `api.chonkybird.com` | `backend:8080` | REST API（Spring Boot） |
 | `monitor.chonkybird.com` | `monitor:9000` | Spring Boot Admin（按需启动） |

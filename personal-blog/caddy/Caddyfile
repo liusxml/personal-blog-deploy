@@ -52,11 +52,11 @@
 
 # 4. 内嵌面板防点击劫持白名单（仅允许自身及博客前台/管理后台线上与本地开发端口通过 iframe 嵌入）
 (iframe_embed) {
-    header +Content-Security-Policy "frame-ancestors 'self' https://chonkybird.com https://www.chonkybird.com https://admin.chonkybird.com http://localhost:3001 http://localhost:3002;"
+    header +Content-Security-Policy "frame-ancestors 'self' https://blog.chonkybird.com https://admin.chonkybird.com http://localhost:3001 http://localhost:3002;"
 }
 
 # ── 博客前台 ──────────────────────────────────────────────────────────
-chonkybird.com, www.chonkybird.com {
+blog.chonkybird.com {
     import common_site
 
     # 将请求反向代理到 frontend 服务（Docker 服务名）的 3000 端口
