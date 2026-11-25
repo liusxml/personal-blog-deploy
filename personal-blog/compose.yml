@@ -499,8 +499,6 @@ services:
       # 挂载整个 caddy 目录，支持 Caddyfile import 拆分配置
       # 参考：https://caddyserver.com/docs/running#setup
       - ./caddy:/etc/caddy:ro
-      # CV 简历静态页（cv.chonkybird.com），由 Caddy file_server 提供服务
-      - ./cv:/srv/cv:ro
       # caddy_data：持久化运行时数据（Cloudflare Origin CA 证书在 certs/ bind mount 中，
       # 此 volume 存储的是 Caddy 内部运行时状态，并非 TLS 证书本身）
       - caddy_data:/data

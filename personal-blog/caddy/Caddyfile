@@ -137,13 +137,11 @@ dockge.chonkybird.com {
     }
 }
 
-# ── CV 简历 ───────────────────────────────────────────────────────────
+# ── CV 简历（已下线，返回 410 Gone 促使搜索引擎永久清除历史索引）─────────
 cv.chonkybird.com {
     import common_site
 
-    # 静态文件服务器，挂载路径见 compose.yml: ./cv:/srv/cv:ro
-    root * /srv/cv
-    file_server
+    respond 410
 }
 
 # ── AGY Master 静态站点 ───────────────────────────────────────────────

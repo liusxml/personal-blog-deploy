@@ -99,7 +99,7 @@ Dockge     → 容器管理面板（dockge.chonkybird.com，宿主机网桥访�
 | `grafana.chonkybird.com` | `grafana:3000` | 监控可视化（Grafana OSS） |
 | `dozzle.chonkybird.com` | `dozzle:8080` | 实时容器日志 |
 | `dockge.chonkybird.com` | `172.17.0.1:5001` | 容器管理（Dockge，宿主机网桥） |
-| `cv.chonkybird.com` | `/srv/cv` | 简历静态页面 |
+| `cv.chonkybird.com` | `410 Gone` | 简历页已下线（返回 410 清理搜索引擎索引） |
 
 ---
 
